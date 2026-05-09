@@ -1,0 +1,38 @@
+# Secrets
+.env
+*.env
+secrets/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# SQLite databases (recreate from ingestion)
+data/positioning.db
+data/positioning.db-*
+data/cache/
+
+# Backup files
+*.bak
+*.bak2
+*.bak3
+*.before_*
+
+# Local logs
+logs/*.log
+logs/*.stdout
+logs/*_status.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp

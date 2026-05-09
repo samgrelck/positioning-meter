@@ -1,0 +1,88 @@
+# Positioning Meter — runtime configuration
+
+universe:
+  source_csv: "/Users/sgrelck/Documents/AI workflows/theme_detector/data/universe.csv"
+  min_market_cap: 1_500_000_000  # $1.5B
+  output_csv: "data/universe.csv"
+
+clusters:
+  source_json: "/Users/sgrelck/Documents/AI workflows/theme_detector/data/clusters.json"
+
+backtest:
+  start_date: "2016-05-08"  # 10y horizon
+  end_date: null  # null => today
+
+storage:
+  db_path: "data/positioning.db"
+  cache_dir: "data/cache"
+
+providers:
+  prices:
+    primary: "polygon"      # polygon | yfinance
+    fallback: "yfinance"
+  options:
+    primary: "yahoo_snapshot"  # yahoo_snapshot | polygon
+    polygon_enabled: false
+  ownership:
+    use_edgar: true
+    use_openinsider: true
+  short_interest:
+    source: "finra"
+  estimates:
+    enabled: false  # overlay only, not in composite
+
+signals:
+  history_window_days_slow: 1260   # 5y for positioning, valuation, technical
+  history_window_days_fast: 252    # 1y for options
+  options_eligibility:
+    min_market_cap: 3_000_000_000
+    min_avg_contract_volume: 1000
+
+composite:
+  bucket_weights:
+    positioning: 0.25
+    options: 0.25
+    flows: 0.10
+    valuation: 0.20
+    technical: 0.20
+  dual_percentile_weights:
+    pct_self: 0.5
+    pct_peer: 0.5
+  compound_flags:
+    late_signal_threshold: 85
+    washout_threshold: 15
+    divergence_min_technical: 80
+    divergence_max_options: 30
+
+etfs:
+  sector:
+    - XLK
+    - SOXX
+    - IGV
+    - SMH
+    - XLC
+    - ARKK
+    - QQQ
+    - IYW
+    - VGT
+    - FDN
+    - SKYY
+    - CIBR
+    - BOTZ
+    - ROBO
+  single_stock_leveraged:
+    - TSLL
+    - NVDL
+    - MSFU
+    - AMZU
+    - GGLL
+    - METU
+
+logging:
+  level: "INFO"
+  log_dir: "logs"
+
+rate_limits:
+  yfinance_sleep_sec: 0.5
+  edgar_req_per_sec: 8  # SEC limit is 10/sec, stay under
+  polygon_req_per_min: 100

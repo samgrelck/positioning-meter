@@ -1,0 +1,67 @@
+{
+  "AI_Infra_Semis": {
+    "label": "AI Infra & Semis",
+    "description": "Compute, networking, memory, semis equipment exposed to AI capex cycle.",
+    "tickers": ["NVDA", "AMD", "AVGO", "MRVL", "ARM", "MU", "INTC", "QCOM", "TXN", "ON", "SWKS", "MCHP", "ADI", "ASML", "KLAC", "LRCX", "AMAT", "TER", "ENTG", "ACLS", "AEHR", "MPWR", "CRDO", "ALAB", "AEIS", "ACMR", "OLED", "WOLF", "FORM", "VECO", "COHU", "ICHR", "AOSL", "DIOD", "POWI", "LSCC", "RMBS", "SLAB", "SITM", "ALGM", "MTSI", "SMTC"]
+  },
+  "AI_Networking": {
+    "label": "AI Networking & Optical",
+    "description": "Pure-play data-center networking, optical components, switching.",
+    "tickers": ["ANET", "CIEN", "CSCO", "JNPR", "LITE", "COHR", "FN", "IIVI", "VIAV", "EXTR", "NTGR", "UI"]
+  },
+  "Hyperscalers_Cloud": {
+    "label": "Hyperscalers & Public Cloud",
+    "description": "MSFT/Azure, AMZN/AWS, GOOG/GCP, plus cloud-adjacent infra software.",
+    "tickers": ["MSFT", "AMZN", "GOOGL", "GOOG", "ORCL", "IBM", "DELL", "HPE", "NTAP", "PSTG", "ANET", "WDC"]
+  },
+  "Cloud_Infra_Software": {
+    "label": "Cloud Infra Software",
+    "description": "Cloud-native infrastructure SaaS — observability, databases, devtools.",
+    "tickers": ["MDB", "NET", "DDOG", "ESTC", "SNOW", "GTLB", "CFLT", "TWLO", "FROG", "DOCN", "DT", "PD", "BRZE", "NCNO"]
+  },
+  "Application_SaaS": {
+    "label": "Application SaaS",
+    "description": "Vertical and horizontal application SaaS, workflow automation.",
+    "tickers": ["NOW", "CRM", "ADBE", "WDAY", "TEAM", "INTU", "ADSK", "ANSS", "PTC", "BSY", "PEGA", "ZUO", "HUBS", "BILL", "PAYC", "PCTY", "DAY", "WK", "BL", "NCNO", "CCC", "DOCU", "SMAR", "TYL", "SPSC", "VEEV", "FROG"]
+  },
+  "Cybersecurity": {
+    "label": "Cybersecurity",
+    "description": "Network, endpoint, cloud, and identity security.",
+    "tickers": ["PANW", "FTNT", "CRWD", "ZS", "S", "OKTA", "TENB", "NET", "CYBR", "QLYS", "RPD", "VRNS", "CHKP", "SCWX", "GEN", "VRNT", "VRSN"]
+  },
+  "AdTech_DigitalMedia": {
+    "label": "AdTech & Digital Media",
+    "description": "Programmatic ad-tech, ad-supported media, MarTech.",
+    "tickers": ["META", "GOOG", "GOOGL", "TTD", "APP", "ROKU", "PINS", "DV", "MGNI", "PUBM", "SEMR", "ZD"]
+  },
+  "Consumer_Internet_Marketplace": {
+    "label": "Consumer Internet & Marketplaces",
+    "description": "Marketplaces, e-commerce platforms, gig economy, OTAs.",
+    "tickers": ["AMZN", "META", "EBAY", "ETSY", "RBLX", "EA", "TTWO", "ZG", "Z", "DASH", "UBER", "ABNB", "BKNG", "EXPE", "CHWY", "MELI", "NFLX", "DIS", "WBD"]
+  },
+  "Fintech_Payments": {
+    "label": "Fintech & Payments",
+    "description": "Payments rails, neobanks, B2B fintech, crypto-adjacent.",
+    "tickers": ["V", "MA", "PYPL", "FI", "FIS", "GPN", "SHOP", "SQ", "SOFI", "AFRM", "UPST", "HOOD", "COIN", "MQ", "FOUR", "PAGS", "BILL", "NU", "ADYEN"]
+  },
+  "AI_Apps_Platforms": {
+    "label": "AI Apps & Platforms",
+    "description": "Software companies positioning around AI/LLM applications and developer platforms.",
+    "tickers": ["PLTR", "AI", "BBAI", "SOUN", "SNOW", "MDB", "DT", "ESTC", "DDOG", "TEAM", "GTLB"]
+  },
+  "Telecom_Connectivity": {
+    "label": "Telecom & Connectivity",
+    "description": "Telecom carriers, tower REITs, satellite, broadband.",
+    "tickers": ["VZ", "T", "TMUS", "CHTR", "CMCSA", "LBRDK", "AMT", "CCI", "SBAC", "DISH", "VIAV", "FYBR", "TIGO"]
+  },
+  "Hardware_Devices": {
+    "label": "Hardware, Devices, IoT",
+    "description": "Consumer + enterprise hardware, IoT modules, electronics distribution.",
+    "tickers": ["AAPL", "DELL", "HPE", "HPQ", "WDC", "STX", "NTAP", "PSTG", "ROKU", "GRMN", "LOGI", "BHE", "BELFA", "JBL", "FLEX", "SANM", "TDC"]
+  },
+  "Industrial_Tech_Automation": {
+    "label": "Industrial Tech & Automation",
+    "description": "Industrial software, automation, robotics, HVAC controls.",
+    "tickers": ["ROK", "GEV", "EMR", "PH", "ETN", "AME", "DOV", "FTV", "ROP", "CGNX", "MKSI", "OLED", "TYL", "JKHY", "VRSK"]
+  }
+}

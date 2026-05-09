@@ -1,0 +1,367 @@
+ticker,name,sic_code,market_cap,exchange,cluster_id
+NVDA,Nvidia Corp,3674,5180031000000.0,XNAS,cluster_54
+GOOGL,Alphabet Inc. Class A Common Stock,7370,4231444016186.12,XNAS,cluster_54
+GOOG,Alphabet Inc. Class C Capital Stock,7370,4203861843515.0,XNAS,cluster_54
+AAPL,Apple Inc.,3571,3974331409399.999,XNAS,cluster_29
+MSFT,Microsoft Corp,7372,3187451280873.0,XNAS,curated_hyperscalers
+AVGO,Broadcom Inc. Common Stock,3674,1893062380008.72,XNAS,cluster_39
+META,"Meta Platforms, Inc. Class A Common Stock",7370,1704145100907.36,XNAS,cluster_8
+MU,"Micron Technology, Inc.",3674,568705004578.79,XNAS,cluster_46
+AMD,Advanced Micro Devices,3674,526941796760.59,XNAS,curated_ai_semiconductors
+ORCL,Oracle Corp,7372,477308594160.0,XNYS,curated_hyperscalers
+INTC,Intel Corp,3674,424797520000.0,XNAS,curated_cpus
+CSCO,"Cisco Systems, Inc. Common Stock (DE)",3576,343087709628.12,XNAS,cluster_14
+PLTR,Palantir Technologies Inc. Class A Common Stock,7372,338430640648.62,XNAS,cluster_54
+AMAT,Applied Materials Inc,3674,302452656412.37,XNAS,cluster_6
+GEV,GE Vernova Inc.,3600,292617264155.35004,XNYS,cluster_0
+TXN,Texas Instruments Incorporated,3674,241174589615.0,XNAS,cluster_63
+KLAC,KLA Corporation Common Stock,3827,237113657000.67,XNAS,cluster_46
+IBM,International Business Machines Corporation,3570,219030865651.2,XNYS,cluster_6
+ANET,Arista Networks,3576,208128116407.02,XNYS,curated_networking
+TMUS,"T-Mobile US, Inc.",4812,202247883350.88,XNAS,curated_wireless_carriers
+VZ,Verizon Communications,4813,197274240000.0,XNYS,curated_wireless_carriers
+ADI,"Analog Devices, Inc.",3674,187109125211.82,XNAS,cluster_46
+T,AT&T Inc.,4813,181073710040.1,XNYS,curated_wireless_carriers
+APH,Amphenol Corporation,3678,176693781497.48,XNYS,cluster_34
+TMO,"Thermo Fisher Scientific, Inc.",3829,174743796839.64,XNYS,cluster_13
+QCOM,Qualcomm Inc,3663,160050000000.0,XNAS,cluster_38
+SHOP,Shopify Inc. Class A subordinate voting shares,7372,158785485563.1,XNAS,cluster_4
+APP,Applovin Corporation Class A Common Stock,7370,150991238662.44998,XNAS,cluster_8
+CRM,"Salesforce, Inc.",7372,148329504862.08,XNYS,cluster_54
+SNDK,Sandisk Corporation Common Stock,3572,147947834284.2,XNAS,curated_memory_storage
+PANW,"Palo Alto Networks, Inc. Common Stock",3577,146782890000.0,XNAS,curated_cybersecurity
+MRVL,"Marvell Technology, Inc. Common Stock",3674,133993236881.35,XNAS,cluster_27
+DELL,Dell Technologies Inc.,3571,133893363109.6,XNYS,curated_tech_hardware_oem
+WDC,Western Digital Corp.,3572,132560437122.78,XNAS,cluster_29
+STX,Seagate Technology Holdings PLC Ordinary Shares (Ireland),3572,129717413465.28,XNAS,cluster_48
+DHR,Danaher Corporation,3823,126676786820.46,XNYS,cluster_14
+VRT,Vertiv Holdings Co Class A Common Stock,3679,117164712144.48,XNYS,cluster_28
+CRWD,"CrowdStrike Holdings, Inc. Class A Common Stock",7372,115391874809.1,XNAS,cluster_44
+INTU,Intuit Inc,7372,110725089000.0,XNAS,cluster_42
+TT,Trane Technologies plc,3822,106304438517.75,XNYS,cluster_33
+CMCSA,Comcast Corp,4841,98736397315.48,XNAS,cluster_17
+ADBE,Adobe Inc.,7372,98301440000.0,XNAS,cluster_3
+NOW,"SERVICENOW, INC.",7372,93323060920.0,XNYS,cluster_24
+SNPS,Synopsys Inc,7372,92694949245.03,XNAS,cluster_39
+CDNS,Cadence Design Systems,7372,89815510641.08,XNAS,cluster_39
+SPOT,Spotify Technology S.A.,4832,89394112028.0,XNYS,cluster_50
+ADP,Automatic Data Processing,7374,80194677977.87999,XNAS,cluster_53
+MPWR,"Monolithic Power Systems, Inc.",3674,73877401440.0,XNAS,cluster_34
+NET,"Cloudflare, Inc. Class A common stock, par value $0.001 per share",7372,73387892133.0,XNYS,curated_cybersecurity
+MSI,"Motorola Solutions, Inc. New",3663,72255357846.14,XNYS,cluster_31
+WBD,"Warner Bros. Discovery, Inc. Series A Common Stock",4841,67557408083.549995,XNAS,cluster_50
+CIEN,Ciena Corporation,3661,66979020885.63,XNYS,cluster_56
+FTNT,"Fortinet, Inc.",3577,63426249534.76,XNAS,curated_cybersecurity
+TER,"Teradyne, Inc. Common Stock",3825,59512935365.64,XNAS,cluster_37
+UI,Ubiquiti Inc. Common Stock,3663,58357780822.44,XNYS,curated_networking
+NXPI,NXP Semiconductors N.V.,3674,58184679326.48,XNAS,cluster_27
+KEYS,"Keysight Technologies, Inc.",3823,56990279088.5,XNYS,cluster_56
+COHR,Coherent Corp.,3827,56988858552.44,XNYS,cluster_34
+LITE,Lumentum Holdings Inc. Common Stock,3669,56503818000.0,XNAS,cluster_46
+CRWV,"CoreWeave, Inc. Class A Common Stock",7372,55740956130.88,XNAS,cluster_21
+AME,"Ametek, Inc.",3823,52444529969.549995,XNYS,cluster_0
+EA,Electronic Arts Inc,7372,50683884493.89,XNAS,curated_gaming_interactive
+ADSK,Autodesk Inc,7372,49553350000.0,XNAS,cluster_54
+SNOW,Snowflake Inc.,7372,49282992000.0,XNYS,cluster_45
+DDOG,"Datadog, Inc. Class A Common Stock",7372,46549142329.950005,XNAS,cluster_14
+MCHP,Microchip Technology Inc,3674,45596073691.08,XNAS,cluster_9
+ROK,"Rockwell Automation, Inc.",3829,45088104901.32,XNYS,cluster_28
+STM,STMicroelectronics N.V.,3674,44270835615.3,XNYS,curated_ai_semiconductors
+CLS,"Celestica, Inc.",3672,41567377104.78,XNYS,cluster_39
+XYZ,"Block, Inc.",7372,41421872969.46001,XNYS,cluster_58
+RBLX,Roblox Corporation,7372,40163264070.98,XNYS,curated_gaming_interactive
+TTWO,Take-Two Interactive Software Inc,7372,39444223882.56,XNAS,curated_gaming_interactive
+HPE,Hewlett Packard Enterprise Company,3570,37085571787.549995,XNYS,curated_networking
+ON,ON Semiconductor Corp,3674,36697438769.4,XNAS,cluster_34
+ROP,"Roper Technologies, Inc. Common Stock",3823,36252263372.52,XNAS,cluster_3
+SATS,EchoStar Corporation,4899,35733943758.3,XNAS,cluster_60
+JBL,Jabil Inc.,3672,34903432436.259995,XNYS,curated_networking
+NBIS,Nebius Group N.V. Class A Ordinary Shares,7370,34286329740.21,XNAS,curated_neoclouds
+GFS,GlobalFoundries Inc. Ordinary Shares,3674,32664318027.84,XNAS,curated_ai_semiconductors
+A,Agilent Technologies Inc.,3826,32462528153.79,XNYS,cluster_13
+FLEX,Flex Ltd. Ordinary Shares,3672,32046459215.84,XNAS,cluster_0
+ALAB,"Astera Labs, Inc. Common Stock",3674,31397694621.12,XNAS,cluster_63
+WDAY,"Workday, Inc. Class A Common Stock",7374,31149197820.0,XNAS,cluster_9
+CRDO,Credo Technology Group Holding Ltd Ordinary Shares,3674,30603934044.8,XNAS,cluster_0
+WAT,Waters Corp,3826,29521308108.43,XNYS,cluster_13
+HUBB,Hubbell Incorporated,3670,28883102857.140003,XNYS,cluster_28
+Q,"Qnity Electronics, Inc.",3674,28817066579.43,XNYS,cluster_37
+RDDT,"Reddit, Inc.",7374,28466931591.57,XNYS,cluster_50
+FOXA,Fox Corporation Class A Common Stock,4833,26863762325.7,XNAS,cluster_17
+ZM,"Zoom Communications, Inc. Class A Common Stock",7370,26855939990.04,XNAS,cluster_55
+CTSH,Cognizant Technology Solutions,7371,26360970230.4,XNAS,cluster_14
+VEEV,Veeva Systems Inc.,7372,25886319571.17,XNYS,cluster_3
+MTD,Mettler-Toledo International,3826,25563332592.4,XNYS,cluster_36
+VRSN,VeriSign Inc,7371,24606399999.999996,XNAS,curated_cybersecurity
+CHTR,Charter Comm Inc Del CL A New,4841,24439387630.7,XNAS,cluster_59
+FOX,Fox Corporation Class B Common Stock,4833,24068910093.24,XNAS,cluster_17
+P,"Everpure, Inc.",3572,23439593764.9,XNYS,cluster_45
+VRSK,"Verisk Analytics, Inc. Common Stock",7374,23142554689.76,XNAS,cluster_12
+FN,Fabrinet,3661,22847747855.58,XNYS,cluster_37
+BCE,"BCE, Inc.",4813,21914356699.5,XNYS,curated_wireless_carriers
+ZS,"Zscaler, Inc. Common Stock",7371,21878790957.21,XNAS,cluster_55
+TSEM,Tower Semiconductor Ltd,3674,21837267911.2,XNAS,curated_ai_semiconductors
+FWONK,Liberty Media Corporation Series C Liberty Formula One Common Stock,4833,21550849813.08,XNAS,cluster_18
+TWLO,Twilio Inc.,7372,21539230097.84,XNYS,cluster_40
+NTAP,"NetApp, Inc",3572,21366935712.0,XNAS,cluster_21
+FSLR,"First Solar, Inc.",3674,21045305853.6,XNAS,cluster_19
+ASTS,"AST SpaceMobile, Inc. Class A Common Stock",4899,21034750363.32,XNAS,cluster_60
+VLTO,Veralto Corporation,3825,21020374015.199997,XNYS,cluster_14
+MDB,"MongoDB, Inc. Class A",7372,20751411871.4,XNAS,cluster_4
+MTSI,"MACOM Technology Solutions Holdings, Inc",3674,19923929351.7,XNAS,cluster_46
+RCI,"Rogers Communications, Inc.",4841,19480523524.68,XNYS,curated_wireless_carriers
+ILMN,Illumina Inc,3826,19280025651.8,XNAS,cluster_13
+TU,Telus Corporation,4812,19251431739.72,XNYS,curated_wireless_carriers
+FTV,Fortive Corporation,3823,19016462166.3,XNYS,cluster_33
+FLUT,Flutter Entertainment plc,7370,18982821044.87,XNYS,cluster_43
+LDOS,"Leidos Holdings, Inc.",7373,18404457874.8,XNYS,cluster_31
+TEAM,Atlassian Corporation Class A Common Stock,7372,18385599398.539997,XNAS,cluster_4
+HPQ,HP Inc.,3570,18044075426.27,XNYS,cluster_29
+MKSI,MKS Inc. Common Stock,3823,18035482894.199997,XNAS,cluster_37
+AMKR,Amkor Technology Inc,3674,17683809943.68,XNAS,cluster_37
+NXT,Nextpower Inc. Class A Common Stock,3812,17303374743.22,XNAS,cluster_19
+FFIV,"F5, Inc. Common Stock",3576,17169989944.670002,XNAS,cluster_9
+IOT,Samsara Inc.,7373,17032408991.009998,XNYS,cluster_4
+TOST,"Toast, Inc.",7374,16805473285.25,XNYS,cluster_4
+SSNC,SS&C Technologies Inc,7372,16634967192.599998,XNAS,cluster_31
+ROKU,"Roku, Inc. Class A Common Stock",4841,16583054362.28,XNAS,curated_gaming_interactive
+SMCI,"Super Micro Computer, Inc. Common Stock",3571,16363133192.0,XNAS,cluster_63
+PTC,"PTC, INC",7372,16315557464.760002,XNAS,cluster_55
+NVMI,Nova Ltd. Ordinary Shares,3827,15858113879.4,XNAS,cluster_37
+IONQ,"IonQ, Inc.",7373,15794883768.48,XNYS,curated_quantum_computing
+LSCC,Lattice Semiconductor Corp,3674,15590796429.57,XNAS,cluster_48
+TRMB,Trimble Inc. Common Stock,3829,15466393033.84,XNAS,cluster_33
+CHKP,Check Point Software Technologies Ltd,7372,14518586572.71,XNAS,curated_cybersecurity
+TYL,"Tyler Technologies, Inc.",7372,14453786702.0,XNYS,cluster_9
+TTMI,TTM Technologies Inc,3672,14287783548.97,XNAS,cluster_15
+LOGI,Logitech International SA,3577,14166355741.44,XNAS,curated_tech_hardware_oem
+ONTO,Onto Innovation Inc.,3829,14047085885.13,XNYS,cluster_37
+AEIS,Advanced Energy Industries Inc,3679,14035231036.96,XNAS,cluster_63
+TIGO,Millicom International Cellular S.A. Common Stock,4812,13750126309.079998,XNAS,curated_wireless_carriers
+SITM,SiTime Corporation Common Stock,3674,13612052294.759998,XNAS,cluster_37
+OKTA,"Okta, Inc. Class A Common Stock",7372,13478860418.4,XNAS,cluster_4
+PL,Planet Labs PBC,3663,12125600415.81,XNYS,cluster_60
+RMBS,Rambus Inc,3674,12034893322.44,XNAS,cluster_6
+GWRE,"GUIDEWIRE SOFTWARE, INC.",7372,11739451364.9,XNYS,cluster_9
+PSKY,Paramount Skydance Corporation Class B Common Stock,4833,11695516466.68,XNAS,cluster_17
+GEN,Gen Digital Inc. Common Stock,7372,11659027649.5,XNAS,cluster_40
+HUBS,"HUBSPOT, INC.",7372,11632546705.63,XNYS,cluster_42
+U,Unity Software Inc.,7372,11580198943.12,XNYS,cluster_54
+SANM,Sanmina  Corp,3672,11548167983.1,XNAS,cluster_37
+PINS,"Pinterest, Inc. Class A Common Stock",7370,11446932527.8,XNYS,cluster_8
+GDDY,GoDaddy Inc,7373,11319044972.9,XNYS,
+VICR,Vicor Corp,3679,11284300912.8,XNAS,cluster_39
+CACI,CACI INTERNATIONAL CLA,7373,11238288679.6,XNYS,cluster_31
+RBRK,"Rubrik, Inc.",7372,11233100848.88,XNYS,cluster_44
+JKHY,Henry (Jack) & Associates,7373,11027173830.400002,XNAS,cluster_58
+AAOI,"Applied Optoelectronics, Inc.",3674,10987342223.38,XNAS,cluster_37
+NTNX,"Nutanix, Inc. Class A Common Stock",7372,10953259606.099998,XNAS,cluster_45
+TTD,"The Trade Desk, Inc.",7370,10920371173.87,XNAS,cluster_4
+DT,"Dynatrace, Inc.",7372,10734057592.86,XNYS,cluster_9
+FORM,FormFactor Inc.,3674,10459926759.2,XNAS,cluster_9
+GSAT,"Globalstar, Inc. Common Stock",4899,10436297136.0,XNAS,cluster_60
+SNAP,Snap Inc.,7370,10049264340.5,XNYS,cluster_8
+VIAV,Viavi Solutions Inc. Common Stock,3674,9989078023.65,XNAS,cluster_9
+DOCN,"DigitalOcean Holdings, Inc.",7370,9848877855.96,XNYS,cluster_45
+BSY,"Bentley Systems, Incorporated Class B Common Stock",7372,9800933150.08,XNAS,cluster_54
+AUR,"Aurora Innovation, Inc. Class A Common Stock",7373,9702834075.0,XNAS,cluster_66
+RVTY,"Revvity, Inc.",3826,9523407393.86,XNYS,cluster_13
+APLD,Applied Digital Corporation Common Stock,7374,9176059897.29,XNAS,cluster_63
+SWKS,Skyworks Solutions Inc,3674,9171755623.74,XNAS,cluster_38
+TEM,"Tempus AI, Inc. Class A Common Stock",7370,9167576082.0,XNAS,cluster_42
+FIG,"Figma, Inc.",7372,9053393820.7,XNYS,cluster_47
+LUMN,"Lumen Technologies, Inc.",4813,8982982573.44,XNYS,cluster_56
+CGNX,Cognex Corp,3823,8975324621.44,XNAS,cluster_33
+DOCU,"DocuSign, Inc. Common Stock",7372,8894659651.08,XNAS,cluster_52
+SIRI,"Sirius XM Holdings,  Inc",4832,8837811429.460001,XNAS,cluster_50
+SMTC,Semtech Corp,3674,8790008894.4,XNAS,cluster_34
+MTCH,"Match Group, Inc",7370,8611335316.155,XNAS,cluster_43
+CAMT,Camtek Ltd,3827,8402954535.64,XNAS,cluster_37
+PCOR,"Procore Technologies, Inc.",7372,8374337976.150001,XNYS,cluster_16
+FDS,Factset Research Systems,7370,8363129514.12,XNYS,cluster_12
+MANH,Manhattan Associates Inc,7372,8301976952.639999,XNAS,cluster_52
+CRUS,Cirrus Logic Inc,3674,8289210786.389999,XNAS,cluster_34
+XNDU,Xanadu Quantum Technologies Limited Class B Subordinate Voting Shares,3571,8268764782.8,XNAS,
+ESE,"ESCO Technologies, Inc.",3669,8212832595.719999,XNYS,cluster_7
+BIO.B,"Bio-Rad Laboratories, Inc. Class B",3826,8082273483.299999,XNYS,cluster_13
+VSAT,Viasat Inc,4899,7886371142.06,XNAS,cluster_60
+QRVO,"Qorvo, Inc.",3674,7867930976.73,XNAS,cluster_9
+ALGM,"Allegro MicroSystems, Inc. Common Stock",3674,7619160574.4,XNAS,cluster_35
+MBLY,Mobileye Global Inc. Class A Common Stock,7372,7617573645.345,XNAS,cluster_14
+BIO,"Bio-Rad Laboratories, Inc.Class A",3826,7539496659.959999,XNYS,cluster_13
+CWAN,"Clearwater Analytics Holdings, Inc.",7372,7162646678.18,XNYS,cluster_58
+SLAB,Silicon Laboratories Inc,3674,7111617015.360001,XNAS,cluster_27
+DOX,Amdocs Limited,7371,6913588170.0,XNAS,cluster_22
+QBTS,D-Wave Quantum Inc.,7374,6708422466.2,XNYS,curated_quantum_computing
+PLXS,Plexus Corp,3672,6598310169.780001,XNAS,cluster_15
+SAIL,"SailPoint, Inc. Common Stock",7372,6495015490.559999,XNAS,cluster_44
+NXST,"Nexstar Media Group, Inc. Common Stock",4833,6192976987.4,XNAS,cluster_18
+DSGX,Descartes Systems Group Inc,7372,6099982616.63,XNAS,cluster_4
+KVYO,"Klaviyo, Inc.",7372,6077196032.56,XNYS,cluster_55
+ST,Sensata Technologies Holding plc,3823,6055055062.32,XNYS,cluster_15
+EPAM,"EPAM SYSTEMS, INC.",7371,6022193970.900001,XNYS,cluster_25
+PEGA,Pegasystems Inc,7374,6009493193.96,XNAS,cluster_14
+APPF,"AppFolio, Inc. Class A",7372,5967813199.74,XNAS,cluster_4
+PAYC,"PAYCOM SOFTWARE, INC.",7372,5949686221.78,XNYS,cluster_42
+TTAN,"ServiceTitan, Inc. Class A Common Stock",7372,5780451011.64,XNAS,cluster_4
+LBRDK,Liberty Broadband Corporation Class C,4841,5768608746.0,XNAS,cluster_59
+LBRDA,Liberty Broadband Corporation Class A,4841,5765738791.4,XNAS,cluster_59
+DBX,"Dropbox, Inc. Class A",7372,5724938742.53,XNAS,cluster_16
+OTEX,Open Text Corp,7373,5636056454.73,XNAS,cluster_58
+LBTYB,Liberty Global Ltd. Class B Common Shares,4841,5578194601.8785,XNAS,cluster_59
+PSN,Parsons Corporation,7373,5547475952.64,XNYS,cluster_31
+VSNT,"Versant Media Group, Inc. Class A Common Stock",4833,5540923562.679999,XNAS,cluster_50
+PATH,"UiPath, Inc.",7372,5532614968.320001,XNYS,cluster_42
+BRKR,Bruker Corporation,3826,5519610947.62,XNAS,cluster_13
+FROG,JFrog Ltd. Ordinary Shares,7372,5512657195.5,XNAS,cluster_47
+PCTY,Paylocity Holding Corporation Common Stock,7372,5509969290.84,XNAS,cluster_52
+RGTI,"Rigetti Computing, Inc. Common Stock",7371,5447143531.72,XNAS,curated_quantum_computing
+YOU,"Clear Secure, Inc.",7372,5418093991.35,XNYS,cluster_44
+GLBE,Global-E Online Ltd. Ordinary Shares,7372,5364878468.54,XNAS,cluster_4
+AVTR,"Avantor, Inc.",3826,5314191202.860001,XNYS,cluster_13
+ONDS,Ondas Inc. Common Stock,3663,5073196756.8,XNAS,cluster_31
+TDS,Telephone and Data Systems Inc.,4813,5060362599.6,XNYS,cluster_63
+VNT,Vontier Corporation,3824,4989225728.98,XNYS,cluster_14
+S,"SentinelOne, Inc.",7372,4985050666.400001,XNYS,cluster_55
+DUOL,"Duolingo, Inc. Class A Common Stock",7372,4970122548.48,XNAS,cluster_42
+ESTC,Elastic N.V.,7372,4911122829.6,XNYS,cluster_55
+RAL,Ralliant Corporation,3823,4903635995.05,XNYS,cluster_33
+WAY,Waystar Holding Corp. Common Stock,7373,4839439239.93,XNAS,cluster_58
+BRAI,Braiin Limited Common Stock,7374,4836890711.16,XNAS,
+IPGP,IPG Photonics Corporation,3674,4768938289.16,XNAS,cluster_11
+OSIS,OSI Systems Inc,3674,4732563327.7,XNAS,cluster_11
+MIR,"Mirion Technologies, Inc.",3829,4684466669.96,XNYS,cluster_36
+MXL,"MaxLinear, Inc. Common Stock",3674,4657285327.59,XNAS,cluster_38
+MRCY,Mercury Systems Inc.,3670,4592919786.96,XNAS,cluster_11
+DOCS,"Doximity, Inc.",7371,4538299098.06,XNYS,cluster_61
+WIX,WIX.com Ltd.,7370,4521679346.08,XNAS,cluster_16
+ENPH,"Enphase Energy, Inc.",3674,4520189313.5,XNAS,cluster_19
+ACIW,"ACI Worldwide, Inc.",7372,4453315968.139999,XNAS,cluster_22
+DIOD,Diodes Inc,3674,4447454445.21,XNAS,cluster_34
+ZETA,Zeta Global Holdings Corp.,7372,4429138203.9,XNYS,cluster_62
+AXTI,AXT Inc,3674,4407000171.98,XNAS,cluster_63
+KLIC,Kulicke & Soffa Industries Inc,3674,4342054297.68,XNAS,cluster_37
+CVLT,"Commault Systems, Inc.",7372,4308610438.26,XNAS,cluster_44
+OLED,Universal Display Corp,3670,4265046929.01,XNAS,cluster_46
+AD,"Array Digital Infrastructure, Inc.",4812,4157906087.4,XNYS,cluster_60
+SAIC,Science Applications International Corporation Common Stock,7373,4089554478.56,XNAS,cluster_31
+NAVN,"Navan, Inc. Class A Common Stock",7372,4049790376.0999994,XNAS,cluster_58
+NTSK,"Netskope, Inc. Class A Common Stock",7372,3995136793.84,XNAS,curated_cybersecurity
+IRDM,Iridium Communications Inc.,4899,3948931238.4,XNAS,cluster_60
+LBTYA,Liberty Global Ltd. Class A Common Shares,4841,3859530796.8,XNAS,cluster_59
+ITRI,Itron Inc,3825,3855822861.0,XNAS,cluster_14
+FSLY,"Fastly, Inc. Class A Common Stock",7372,3851342411.46,XNAS,cluster_55
+GTLB,GitLab Inc. Class A Common Stock,7372,3817762080.0,XNAS,cluster_4
+LBTYK,Liberty Global Ltd. Class C Common Shares,4841,3762372469.45,XNAS,cluster_59
+BILL,"BILL Holdings, Inc.",7372,3733777401.2,XNYS,cluster_58
+LASR,"nLIGHT, Inc. Common Stock",3674,3710416873.02,XNAS,cluster_63
+POWI,Power Integrations Inc,3674,3677576759.6,XNAS,cluster_37
+SRAD,Sportradar Group AG Class A Ordinary Shares,7370,3653346396.7,XNAS,cluster_61
+VSH,"Vishay Intertechnology, Inc.",3670,3639453983.9,XNYS,cluster_34
+PI,"Impinj, Inc. Common Stock",3679,3591524296.7999997,XNAS,cluster_38
+UCTT,"Ultra Clean Holdings, Inc.",3674,3507612042.25,XNAS,cluster_46
+NVTS,Navitas Semiconductor Corporation Common Stock,3674,3489586606.7999997,XNAS,cluster_63
+LIF,"Life360, Inc. Common Stock",7374,3486533794.83,XNAS,cluster_43
+HNGE,"Hinge Health, Inc.",7374,3461672896.6600003,XNYS,cluster_42
+BMI,"Badger Meter, Inc.",3824,3456155199.4,XNYS,cluster_0
+MNDY,monday.com Ltd. Ordinary Shares,7372,3440565279.5,XNAS,cluster_47
+SOUN,"SoundHound AI, Inc. Class A Common Stock",7372,3435253043.3,XNAS,cluster_55
+BOX,"BOX, INC.",7372,3392014734.5,XNYS,cluster_52
+ADEA,Adeia Inc. Common Stock,4841,3346573818.36,XNAS,cluster_50
+SYNA,Synaptics Inc,3674,3338503674.2000003,XNAS,cluster_6
+CARG,"CarGurus, Inc. Class A Common Stock",7374,3332404181.4,XNAS,cluster_61
+RNG,"RINGCENTRAL, INC.",7374,3326751634.47,XNYS,cluster_40
+IAC,IAC Inc. Common Stock,7370,3300622901.2,XNAS,cluster_50
+NATL,NCR Atleos Corporation,3578,3277523992.6,XNYS,cluster_58
+NIQ,NIQ Global Intelligence plc,7370,3258072591.8399997,XNYS,cluster_62
+BELFB,Bel Fuse Inc,3677,3187449382.88,XNAS,cluster_0
+CLBT,Cellebrite DI Ltd. Class A Ordinary Shares,7372,3162896879.56,XNAS,curated_cybersecurity
+QTWO,Q2 Holdings Inc,7372,3130203299.52,XNYS,cluster_58
+WK,Workiva Inc.,7372,3054574929.49,XNYS,cluster_24
+KD,"Kyndryl Holdings, Inc.",7373,3034519204.32,XNYS,cluster_31
+QLYS,"Qualys, Inc. Common Stock",7372,3024348629.3,XNAS,cluster_52
+BB,BlackBerry Limited,7372,3021715536.0,XNYS,cluster_44
+VRNS,"Varonis Systems, Inc.",7372,2920871976.0,XNAS,cluster_52
+BELFA,Bel Fuse Inc,3677,2892972032.1600003,XNAS,cluster_0
+DBD,"Diebold Nixdorf, Incorporated",3578,2864792962.7,XNYS,cluster_58
+PLAB,Photronics Inc,3674,2838052543.2200003,XNAS,cluster_34
+STNE,StoneCo Ltd. Class A Common Shares,7374,2836041115.16,XNAS,cluster_58
+PAGS,PagSeguro Digital Ltd.,7374,2825940517.29,XNYS,cluster_58
+CCC,CCC Intelligent Solutions Holdings Inc. Common Stock,7372,2793512876.2799997,XNAS,cluster_58
+AMBA,"Ambarella, Inc. Ordinary Shares",3674,2791541036.25,XNAS,cluster_38
+UNIT,Uniti Group Inc. Common Stock,4813,2788325983.5,XNAS,
+IHS,IHS Holding Limited,4812,2768050081.5,XNYS,cluster_60
+TXG,"10x Genomics, Inc. Class A Common Stock",3826,2756536259.58,XNAS,cluster_13
+INFQ,"Infleqtion, Inc.",7374,2731875718.74,XNYS,curated_quantum_computing
+SEDG,"SolarEdge Technologies, Inc.",3674,2693626075.41,XNAS,cluster_19
+CALX,"CALIX, INC.",4899,2680770026.9700003,XNYS,cluster_63
+KYIV,Kyivstar Group Ltd. Common Shares,4812,2680326674.64,XNAS,curated_wireless_carriers
+AEHR,Aehr Test Systems,3825,2592691727.2200003,XNAS,cluster_37
+NYAX,Nayax Ltd. Ordinary Shares,7372,2543582358.95,XNAS,cluster_58
+BRZE,"Braze, Inc. Class A Common Stock",7372,2542385411.82,XNAS,cluster_55
+DJT,Trump Media & Technology Group Corp. Common Stock,7370,2534858845.4,XNAS,
+GRND,Grindr Inc.,7370,2488385262.72,XNYS,cluster_43
+BHE,Benchmark Electronics,3672,2468698847.16,XNYS,cluster_15
+TDC,TERADATA CORPORATION,7372,2436993995.58,XNYS,cluster_54
+NTCT,Netscout Systems Inc,7373,2363772055.5,XNAS,curated_cybersecurity
+TENB,"Tenable Holdings, Inc.",7372,2348302911.92,XNAS,curated_cybersecurity
+FRSH,Freshworks Inc. Class A Common Stock,7372,2312538690.8999996,XNAS,cluster_3
+ICHR,Ichor Holdings,3674,2311913069.94,XNAS,cluster_37
+CSGS,CSG Systems International,7374,2290415576.96,XNAS,cluster_42
+EXTR,Extreme Networks,3576,2289295657.0,XNAS,curated_networking
+PBI,Pitney Bowes Inc.,3579,2270774007.6,XNYS,cluster_28
+FA,First Advantage Corporation Common Stock,7374,2249913203.1,XNAS,cluster_12
+VISN,"Vistance Networks, Inc. Common Stock",3663,2232082314.0,XNAS,curated_networking
+ALRM,"Alarm.com Holdings, Inc.",7372,2224934788.4,XNAS,cluster_15
+AVPT,"AvePoint, Inc. Class A Common Stock",7372,2161746707.12,XNAS,cluster_9
+EVCM,EverCommerce Inc. Common Stock,7372,2129026759.31,XNAS,cluster_58
+COHU,Cohu Inc,3825,2082391173.7,XNAS,cluster_6
+OMCL,Omnicell Inc,3571,2069671877.49,XNAS,cluster_42
+DGII,Digi International Inc,3576,2060339344.8,XNAS,cluster_56
+SPSC,"SPS Commerce, Inc.",7372,2043911401.32,XNAS,cluster_40
+VERX,"Vertex, Inc. Class A Common Stock",7372,2042748224.55,XNAS,cluster_52
+ATEN,A10 NETWORKS INC,3576,2017595107.32,XNYS,curated_networking
+NCNO,"nCino, Inc. Common Stock",7372,1992903797.4,XNAS,cluster_4
+BBAI,"BigBear.ai Holdings, Inc.",7372,1961353097.24,XNYS,cluster_31
+DXC,DXC Technology Company,7374,1957332373.39,XNYS,cluster_6
+QUBT,Quantum Computing Inc. Common,7372,1932723857.09,XNAS,curated_quantum_computing
+MGRT,Mega Fortune Company Limited Ordinary Shares,7371,1909600000.0,XNAS,
+BL,"BlackLine, Inc. Common Stock",7372,1886911171.2,XNAS,cluster_58
+RAMP,"LiveRamp Holdings, Inc. Common Stock",7374,1877965596.5,XNYS,cluster_4
+AGYS,"Agilysys, Inc. Common Stock (DE)",7373,1868917343.03,XNAS,cluster_4
+MGNI,"Magnite, Inc. Common Stock",7370,1857498588.91,XNAS,cluster_62
+EVTC,"EVERTEC, INC.",7374,1849226523.44,XNYS,cluster_58
+MQ,"Marqeta, Inc. Class A Common Stock",7372,1848209460.3,XNAS,cluster_42
+GTM,ZoomInfo Technologies Inc Common Stock,7372,1841981784.9,XNAS,cluster_40
+INTA,"Intapp, Inc. Common Stock",7372,1824180452.41,XNAS,cluster_4
+SEMR,"SEMrush Holdings, Inc.",7372,1814168904.0,XNYS,cluster_62
+ZD,"Ziff Davis, Inc. Common Stock",4822,1786287602.6,XNAS,cluster_50
+ALMR,"Alamar Biosciences, Inc. Common Stock",3826,1780935031.75,XNAS,
+GLOB,GLOBANT S.A.,7374,1771225387.12,XNYS,cluster_26
+ALKT,"Alkami Technology, Inc. Common Stock",7372,1741166166.98,XNAS,cluster_58
+BLKB,"Blackbaud, Inc.",7372,1731161745.06,XNAS,cluster_58
+DV,"DoubleVerify Holdings, Inc.",7370,1715518871.63,XNYS,cluster_62
+LILAK,Liberty Latin America Ltd. Class C Common Stock,4841,1692828098.64,XNAS,cluster_59
+LILA,Liberty Latin America Ltd. Class A Common Stock,4841,1652808521.84,XNAS,cluster_59
+NSSC,"Napco Security Technologies, Inc",3669,1628076390.6,XNAS,cluster_15
+APPN,Appian Corporation Class A Common Stock,7372,1620371404.25,XNAS,cluster_14
+CLVT,Clarivate Plc,7374,1611870650.4199998,XNYS,cluster_40
+PDFS,PDF Solutions Inc,7372,1599617430.9,XNAS,cluster_37
+CTS,CTS Corporation,3672,1554834794.49,XNYS,cluster_34
+KDK,"Kodiak AI, Inc. Common Stock",7373,1545795584.29,XNAS,cluster_66
+KARO,Karooooo Ltd. Ordinary Shares,7372,1544356067.0,XNAS,cluster_4
+SKYT,"SkyWater Technology, Inc. Common Stock",3674,1531746079.68,XNAS,cluster_34
+XZO,"Exzeo Group, Inc.",7372,1523710930.4,XNYS,
+RUM,Rumble Inc. Class A Common Stock,7370,1512400553.09,XNAS,cluster_8
+ASAN,"Asana, Inc. Class A Common Stock",7372,1502509790.28,XNYS,cluster_42
+AMZN,Amazon.Com Inc,5961,2792879192200.3,XNAS,curated_hyperscalers
+ARM,Arm Holdings plc American Depositary Shares,,210966015731.85,XNAS,curated_cpus
+ASML,ASML Holding NV,,533633882252.39996,XNAS,curated_ai_semiconductors
+TSM,Taiwan Semiconductor Manufacturing Company Ltd.,,2034832175999.9998,XNYS,curated_ai_semiconductors
+SAP,SAP SE,,202559819237.52002,XNYS,cluster_54
+BABA,"Alibaba Group Holding Limited American Depositary Shares, each represents eight Ordinary Shares",,313915528152.39996,XNYS,curated_china_tech_adrs
+BIDU,"Baidu, Inc.",,42790174395.840004,XNAS,curated_china_tech_adrs
+PDD,PDD Holdings Inc. American Depositary Shares,,138117404287.98,XNAS,curated_china_tech_adrs
+JD,"JD.com, Inc.",,40605850392.090004,XNAS,curated_china_tech_adrs
+NTES,"NetEase, inc.",,71317197014.8,XNAS,curated_china_tech_adrs
+BILI,Bilibili Inc. American Depositary Shares,,8940743464.62,XNAS,curated_china_tech_adrs

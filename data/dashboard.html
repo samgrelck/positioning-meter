@@ -305,7 +305,7 @@ tr:hover td { background: #f8fafc; }
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>As of <b>2026-05-08</b> · 346 TMT names · V1.4 + min-buckets · Backtest IC <b>−0.022</b> at 3m fwd · Bot decile hit <b>56%</b></div>
+<div class=subtitle>As of <b>2026-05-08</b> · 346 TMT names · <b>V1.5</b> (sentiment + positioning only) · Backtest IC <b>−0.020</b> at 3m fwd · Bot decile hit <b>56%</b></div>
 </div>
 </header>
 
@@ -328,7 +328,7 @@ tr:hover td { background: #f8fafc; }
 
 <div class=gloss-card>
 <h4>Temperature (0–100)</h4>
-<p>The composite "how hot/late" score. Each signal is ranked vs its own trailing 5y history (0=coldest ever, 100=hottest ever) AND vs cluster peers, then blended 50/50. Bucket scores average their signals; composite averages buckets. <b>High temperature ⇒ stretched positioning + momentum + valuation, historically associated with negative forward returns at extremes (V1.4 backtest IC −0.022 at 3m).</b></p>
+<p>The composite "how hot/late" score. Each signal is ranked vs its own trailing 5y history (0=coldest ever, 100=hottest ever) AND vs cluster peers, then blended 50/50. Bucket scores average their signals; composite averages buckets. <b>High temperature ⇒ stretched positioning + price-revealed sentiment, historically associated with negative forward returns at extremes (V1.5 backtest IC −0.020 at 3m fwd, bot decile hit 56%).</b></p>
 </div>
 
 <div class=gloss-card>
@@ -371,8 +371,8 @@ tr:hover td { background: #f8fafc; }
 </div>
 
 <div class=gloss-card>
-<h4>Backtest validation (V1.4)</h4>
-<p>Composite IC −0.022 at 3-month forward (Spearman). Bottom-decile temperature → 56% positive forward return; top-decile → 56% negative. Strongest individual signal: <code>si_true_dtc</code> (NASDAQ days-to-cover) IC −0.064 at 3m.</p>
+<h4>Backtest validation (V1.5)</h4>
+<p>Composite IC −0.020 at 3-month forward (Spearman). Bottom-decile temperature → 56% positive forward return; top-decile → 54% negative. Strongest individual signal: <code>si_true_dtc</code> (NASDAQ days-to-cover) IC −0.064 at 3m. V1.5 dropped valuation from composite without meaningful loss vs V1.4 (was −0.022).</p>
 </div>
 
 </div>
@@ -2735,12 +2735,12 @@ tr:hover td { background: #f8fafc; }
 <div class="tab-content" id=tab-backtest>
 
     <div class="panel" id="backtest-panel">
-        <h3>📈 Backtest validation (V1.4)</h3>
+        <h3>📈 Backtest validation (V1.5)</h3>
         <p class=hint>Information Coefficient (Spearman) per signal vs forward returns. <b class=chg-down>Negative IC</b> = contrarian (high signal predicts negative forward return). Top/bot hit rates measure decile reliability.</p>
         <div class=table-wrap>
         <table class=signals>
             <thead><tr><th>Signal</th><th>Best</th><th class=num>IC</th><th class=num>Top hit</th><th class=num>Bot hit</th></tr></thead>
-            <tbody><tr><td><b>Composite (V1.4)</b></td><td>1w</td><td class='num mono chg-down'>-0.0132</td><td class=num>47.9%</td><td class=num>53.7%</td></tr><tr><td><b>Composite (V1.4)</b></td><td>1m</td><td class='num mono chg-down'>-0.0197</td><td class=num>46.9%</td><td class=num>55.1%</td></tr><tr><td><b>Composite (V1.4)</b></td><td>3m</td><td class='num mono chg-down'>-0.0202</td><td class=num>45.7%</td><td class=num>55.6%</td></tr><tr><td class=mono>si_true_dtc</td><td class=mono>pct_peer @ 3m</td><td class='num mono chg-down'>-0.0642</td><td class=num>45.5%</td><td class=num>56.3%</td></tr><tr><td class=mono>ret_3m</td><td class=mono>pct_self @ 3m</td><td class='num mono chg-down'>-0.0378</td><td class=num>45.2%</td><td class=num>60.0%</td></tr><tr><td class=mono>ret_1m</td><td class=mono>pct_self @ 1m</td><td class='num mono chg-down'>-0.0326</td><td class=num>45.7%</td><td class=num>58.3%</td></tr><tr><td class=mono>rsi_14</td><td class=mono>pct_self @ 1m</td><td class='num mono chg-down'>-0.0300</td><td class=num>47.2%</td><td class=num>57.2%</td></tr><tr><td class=mono>short_volume_ratio_14d</td><td class=mono>pct_peer @ 3m</td><td class='num mono chg-down'>-0.0255</td><td class=num>45.9%</td><td class=num>56.4%</td></tr><tr><td class=mono>hf_count_13f</td><td class=mono>pct_self @ 3m</td><td class='num mono chg-up'>+0.0233</td><td class=num>42.4%</td><td class=num>56.2%</td></tr><tr><td class=mono>rs_vs_xlk_3m</td><td class=mono>pct_self @ 3m</td><td class='num mono chg-up'>+0.0228</td><td class=num>42.6%</td><td class=num>53.1%</td></tr><tr><td class=mono>insider_net_90d_signed</td><td class=mono>pct_peer @ 3m</td><td class='num mono chg-down'>-0.0215</td><td class=num>40.3%</td><td class=num>63.8%</td></tr><tr><td class=mono>pct_from_52w_high</td><td class=mono>pct_self @ 1m</td><td class='num mono chg-down'>-0.0196</td><td class=num>45.8%</td><td class=num>57.5%</td></tr><tr><td class=mono>dist_200ma</td><td class=mono>pct_peer @ 3m</td><td class='num mono chg-up'>+0.0193</td><td class=num>43.0%</td><td class=num>54.9%</td></tr><tr><td class=mono>ret_6m</td><td class=mono>pct_peer @ 3m</td><td class='num mono chg-up'>+0.0193</td><td class=num>42.5%</td><td class=num>55.8%</td></tr><tr><td class=mono>rs_vs_qqq_3m</td><td class=mono>pct_peer @ 3m</td><td class='num mono chg-up'>+0.0168</td><td class=num>42.4%</td><td class=num>55.5%</td></tr></tbody>
+            <tbody><tr><td><b>Composite (V1.5)</b></td><td>1w</td><td class='num mono chg-down'>-0.0132</td><td class=num>47.9%</td><td class=num>53.7%</td></tr><tr><td><b>Composite (V1.5)</b></td><td>1m</td><td class='num mono chg-down'>-0.0197</td><td class=num>46.9%</td><td class=num>55.1%</td></tr><tr><td><b>Composite (V1.5)</b></td><td>3m</td><td class='num mono chg-down'>-0.0202</td><td class=num>45.7%</td><td class=num>55.6%</td></tr><tr><td class=mono>si_true_dtc</td><td class=mono>pct_peer @ 3m</td><td class='num mono chg-down'>-0.0642</td><td class=num>45.5%</td><td class=num>56.3%</td></tr><tr><td class=mono>ret_3m</td><td class=mono>pct_self @ 3m</td><td class='num mono chg-down'>-0.0378</td><td class=num>45.2%</td><td class=num>60.0%</td></tr><tr><td class=mono>ret_1m</td><td class=mono>pct_self @ 1m</td><td class='num mono chg-down'>-0.0326</td><td class=num>45.7%</td><td class=num>58.3%</td></tr><tr><td class=mono>rsi_14</td><td class=mono>pct_self @ 1m</td><td class='num mono chg-down'>-0.0300</td><td class=num>47.2%</td><td class=num>57.2%</td></tr><tr><td class=mono>short_volume_ratio_14d</td><td class=mono>pct_peer @ 3m</td><td class='num mono chg-down'>-0.0255</td><td class=num>45.9%</td><td class=num>56.4%</td></tr><tr><td class=mono>hf_count_13f</td><td class=mono>pct_self @ 3m</td><td class='num mono chg-up'>+0.0233</td><td class=num>42.4%</td><td class=num>56.2%</td></tr><tr><td class=mono>rs_vs_xlk_3m</td><td class=mono>pct_self @ 3m</td><td class='num mono chg-up'>+0.0228</td><td class=num>42.6%</td><td class=num>53.1%</td></tr><tr><td class=mono>insider_net_90d_signed</td><td class=mono>pct_peer @ 3m</td><td class='num mono chg-down'>-0.0215</td><td class=num>40.3%</td><td class=num>63.8%</td></tr><tr><td class=mono>pct_from_52w_high</td><td class=mono>pct_self @ 1m</td><td class='num mono chg-down'>-0.0196</td><td class=num>45.8%</td><td class=num>57.5%</td></tr><tr><td class=mono>dist_200ma</td><td class=mono>pct_peer @ 3m</td><td class='num mono chg-up'>+0.0193</td><td class=num>43.0%</td><td class=num>54.9%</td></tr><tr><td class=mono>ret_6m</td><td class=mono>pct_peer @ 3m</td><td class='num mono chg-up'>+0.0193</td><td class=num>42.5%</td><td class=num>55.8%</td></tr><tr><td class=mono>rs_vs_qqq_3m</td><td class=mono>pct_peer @ 3m</td><td class='num mono chg-up'>+0.0168</td><td class=num>42.4%</td><td class=num>55.5%</td></tr></tbody>
         </table>
         </div>
     </div>
@@ -67580,7 +67580,7 @@ tr:hover td { background: #f8fafc; }
 <p><b>Signals</b>: 18 daily signals — 13 in composite, 5 overlay-only. Inclusion driven by backtest IC sign (positive IC = trend, excluded from contrarian composite).</p>
 <p><b>Dual percentile</b>: each signal ranked vs (a) own 5y trailing history and (b) cluster peers cross-section. Bucket scores average those.</p>
 <p><b>Composite</b>: weighted average of bucket scores. Reweighted when buckets are missing. Min 2 buckets required for a temperature reading.</p>
-<p><b>Backtest</b>: 10y daily panel. IC = Spearman correlation between signal percentile and forward return. V1.4 composite IC −0.022 at 3m fwd, decile spread −2.30%, bot decile hit 56%. See data/backtest_report.md.</p>
+<p><b>Backtest</b>: 10y daily panel. IC = Spearman correlation between signal percentile and forward return. V1.5 composite IC −0.020 at 3m fwd, decile spread −2.09%, bot decile hit 56%. (V1.4 with valuation included was −0.022 — statistically equivalent.) See data/backtest_report.md.</p>
 <p><b>Limitations</b>: options bucket not implemented (Polygon $200/mo would unlock). ETF flows forward-only. EPS revisions live snapshot only. NASDAQ true SI covers only NASDAQ-listed names (~65% of universe). 13F has 45-day reporting lag and is long-only.</p>
 </div>
 </details>

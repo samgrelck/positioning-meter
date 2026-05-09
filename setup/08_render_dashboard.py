@@ -475,11 +475,11 @@ def render_backtest_card(results: list) -> str:
     for r in composite:
         ic = r.get("ic")
         ic_cls = "chg-down" if ic and ic < 0 else "chg-up"
-        comp_rows.append(f"<tr><td><b>Composite (V1.4)</b></td><td>{r['horizon']}</td><td class='num mono {ic_cls}'>{ic:+.4f}</td><td class=num>{r['top_hit_rate']:.1%}</td><td class=num>{r['bot_hit_rate']:.1%}</td></tr>")
+        comp_rows.append(f"<tr><td><b>Composite (V1.5)</b></td><td>{r['horizon']}</td><td class='num mono {ic_cls}'>{ic:+.4f}</td><td class=num>{r['top_hit_rate']:.1%}</td><td class=num>{r['bot_hit_rate']:.1%}</td></tr>")
 
     return f"""
     <div class="panel" id="backtest-panel">
-        <h3>📈 Backtest validation (V1.4)</h3>
+        <h3>📈 Backtest validation (V1.5)</h3>
         <p class=hint>Information Coefficient (Spearman) per signal vs forward returns. <b class=chg-down>Negative IC</b> = contrarian (high signal predicts negative forward return). Top/bot hit rates measure decile reliability.</p>
         <div class=table-wrap>
         <table class=signals>
@@ -499,7 +499,7 @@ def render_glossary() -> str:
 
 <div class=gloss-card>
 <h4>Temperature (0–100)</h4>
-<p>The composite "how hot/late" score. Each signal is ranked vs its own trailing 5y history (0=coldest ever, 100=hottest ever) AND vs cluster peers, then blended 50/50. Bucket scores average their signals; composite averages buckets. <b>High temperature ⇒ stretched positioning + momentum + valuation, historically associated with negative forward returns at extremes (V1.4 backtest IC −0.022 at 3m).</b></p>
+<p>The composite "how hot/late" score. Each signal is ranked vs its own trailing 5y history (0=coldest ever, 100=hottest ever) AND vs cluster peers, then blended 50/50. Bucket scores average their signals; composite averages buckets. <b>High temperature ⇒ stretched positioning + price-revealed sentiment, historically associated with negative forward returns at extremes (V1.5 backtest IC −0.020 at 3m fwd, bot decile hit 56%).</b></p>
 </div>
 
 <div class=gloss-card>
@@ -542,8 +542,8 @@ def render_glossary() -> str:
 </div>
 
 <div class=gloss-card>
-<h4>Backtest validation (V1.4)</h4>
-<p>Composite IC −0.022 at 3-month forward (Spearman). Bottom-decile temperature → 56% positive forward return; top-decile → 56% negative. Strongest individual signal: <code>si_true_dtc</code> (NASDAQ days-to-cover) IC −0.064 at 3m.</p>
+<h4>Backtest validation (V1.5)</h4>
+<p>Composite IC −0.020 at 3-month forward (Spearman). Bottom-decile temperature → 56% positive forward return; top-decile → 54% negative. Strongest individual signal: <code>si_true_dtc</code> (NASDAQ days-to-cover) IC −0.064 at 3m. V1.5 dropped valuation from composite without meaningful loss vs V1.4 (was −0.022).</p>
 </div>
 
 </div>
@@ -957,7 +957,7 @@ tr:hover td {{ background: #f8fafc; }}
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · V1.4 + min-buckets · Backtest IC <b>−0.022</b> at 3m fwd · Bot decile hit <b>56%</b></div>
+<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.5</b> (sentiment + positioning only) · Backtest IC <b>−0.020</b> at 3m fwd · Bot decile hit <b>56%</b></div>
 </div>
 </header>
 
@@ -1066,7 +1066,7 @@ tr:hover td {{ background: #f8fafc; }}
 <p><b>Signals</b>: 18 daily signals — 13 in composite, 5 overlay-only. Inclusion driven by backtest IC sign (positive IC = trend, excluded from contrarian composite).</p>
 <p><b>Dual percentile</b>: each signal ranked vs (a) own 5y trailing history and (b) cluster peers cross-section. Bucket scores average those.</p>
 <p><b>Composite</b>: weighted average of bucket scores. Reweighted when buckets are missing. Min 2 buckets required for a temperature reading.</p>
-<p><b>Backtest</b>: 10y daily panel. IC = Spearman correlation between signal percentile and forward return. V1.4 composite IC −0.022 at 3m fwd, decile spread −2.30%, bot decile hit 56%. See data/backtest_report.md.</p>
+<p><b>Backtest</b>: 10y daily panel. IC = Spearman correlation between signal percentile and forward return. V1.5 composite IC −0.020 at 3m fwd, decile spread −2.09%, bot decile hit 56%. (V1.4 with valuation included was −0.022 — statistically equivalent.) See data/backtest_report.md.</p>
 <p><b>Limitations</b>: options bucket not implemented (Polygon $200/mo would unlock). ETF flows forward-only. EPS revisions live snapshot only. NASDAQ true SI covers only NASDAQ-listed names (~65% of universe). 13F has 45-day reporting lag and is long-only.</p>
 </div>
 </details>

@@ -156,14 +156,18 @@ def compute_flags(
         return panel.fillna(False).astype(int).where(panel.notna())
 
     flags = {}
-    if pos is not None and val is not None and tech is not None:
+    if pos is not None and tech is not None:
         # Align indexes
         idx = tech.index
         cols = tech.columns
         pos_a = pos.reindex(index=idx, columns=cols)
-        val_a = val.reindex(index=idx, columns=cols)
-        late = (pos_a >= late_thr) & (tech >= late_thr) & (val_a >= max(0, late_thr - 5))
-        wash = (pos_a <= wash_thr) & (tech <= wash_thr) & (val_a <= wash_thr + 10)
+        late = (pos_a >= late_thr) & (tech >= late_thr)
+        wash = (pos_a <= wash_thr) & (tech <= wash_thr)
+        # If valuation IS present (overlay), use it as a tiebreaker confirmation
+        if val is not None:
+            val_a = val.reindex(index=idx, columns=cols)
+            late = late & (val_a.isna() | (val_a >= max(0, late_thr - 10)))
+            wash = wash & (val_a.isna() | (val_a <= wash_thr + 15))
         flags["flag_late_signal"] = _to_int(late)
         flags["flag_washout"] = _to_int(wash)
     if tech is not None and opt is not None:

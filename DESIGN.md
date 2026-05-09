@@ -1,6 +1,8 @@
 # Positioning Meter — Design Document
 
-A daily-run system that measures **how crowded, hot, and stretched** individual TMT stocks are, to help a discretionary L/S analyst judge how early or late we are in a move.
+> **V1.5 status:** sentiment / positioning / expectations only. Valuation moved to overlay (still shown on drill-down). See `SUMMARY.md` for current state.
+
+A daily-run system that measures **how crowded, hot, and stretched** individual TMT stocks are along sentiment + positioning dimensions, to help a discretionary L/S analyst judge how early or late we are in a move. Valuation is assessed separately by the analyst.
 
 > **Project name TBD.** Working name `positioning_meter`. Alternatives: `crowding_monitor`, `temperature_meter`, `sentiment_gauge`. Easy to rename later.
 
@@ -8,7 +10,9 @@ A daily-run system that measures **how crowded, hot, and stretched** individual 
 
 ## 1. Purpose & non-goals
 
-**Purpose.** For each name in the TMT universe, output a **percentile-vs-own-history composite score** ("temperature") plus per-bucket subscores (positioning, options, flows, valuation, technicals), so the analyst can quickly answer: *how much is priced in, how crowded is the trade, and where in the cycle of expectations are we?*
+**Purpose.** For each name in the TMT universe, output a **percentile-vs-own-history composite score** ("temperature") plus per-bucket subscores (positioning, technical/sentiment, eventually options + flows), so the analyst can quickly answer: *how crowded is the trade, where in the sentiment cycle are we, how stretched is positioning?*
+
+**V1.5 scope clarification:** valuation is computed and visible on drill-downs as overlay, but does NOT enter the composite. The composite is purely sentiment/positioning/expectations.
 
 **Use cases.**
 - Triage: which names on the long/short watchlist are stretched vs. quiet?
@@ -137,12 +141,14 @@ temperature = w_positioning · S_pos
             + w_technical  · S_tech
 ```
 
-**Initial weights** (subjective, will tune via backtest):
-- Positioning: 0.25
-- Options: 0.25
-- Flows: 0.10
-- Valuation: 0.20
-- Technical: 0.20
+**V1.5 weights:**
+- Positioning: 0.50
+- Technical: 0.50
+- Options: 0.00 (placeholder for Phase 5)
+- Flows: 0.00 (placeholder)
+- ~~Valuation~~: 0.00 (excluded — see V1.5 decision in QUESTIONS.md)
+
+**Original (V1.0) weights** were 0.25/0.25/0.10/0.20/0.20. Backtest iterations narrowed scope.
 
 **Missing-data handling:** if a bucket is null (e.g. options for thinly-traded names), redistribute its weight proportionally across remaining buckets.
 

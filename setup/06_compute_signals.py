@@ -25,17 +25,17 @@ from lib.signals.composite import (
 # excluded from composite; remain computed and stored for dashboard overlays.
 #
 # IN composite (contrarian / "hot=late" direction):
+# V1.5: valuation moved to overlay. Tool is sentiment/positioning/expectations
+# only. Valuation is a fundamental signal — assessed separately by the analyst.
+# Plus: empirically weakest bucket in V1.4 backtest (IC near zero or wrong sign).
 SIGNAL_TO_BUCKET = {
-    # technical (contrarian only)
+    # technical (contrarian only — sentiment via price action)
     "ret_1m": "technical",
     "ret_3m": "technical",
     "ret_6m": "technical",
     "dist_200ma": "technical",
     "rsi_14": "technical",
     "pct_from_52w_high": "technical",
-    # valuation
-    "ttm_pe": "valuation",
-    "ev_sales": "valuation",
     # positioning
     "insider_net_90d_signed": "positioning",
     "short_volume_ratio_14d": "positioning",
@@ -45,6 +45,7 @@ SIGNAL_TO_BUCKET = {
 # Computed but excluded from composite — overlay only.
 # V1.3: hf_count_13f and hf_count_change_4q showed positive IC in V1.2
 # backtest (trend-following, not contrarian). Moved here.
+# V1.5: valuation moved here — fundamental, not behavioral.
 OVERLAY_SIGNALS = {
     "ret_12m": "technical_trend_overlay",
     "rs_vs_qqq_3m": "technical_trend_overlay",
@@ -53,6 +54,8 @@ OVERLAY_SIGNALS = {
     "hf_count_13f": "positioning_trend_overlay",
     "hf_count_change_4q": "positioning_trend_overlay",
     "hf_top_concentration": "positioning_overlay",
+    "ttm_pe": "valuation_overlay",
+    "ev_sales": "valuation_overlay",
 }
 
 # All signals to compute and persist (composite + overlay):

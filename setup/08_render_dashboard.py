@@ -1,12 +1,14 @@
 """Render the Positioning Meter HTML dashboard.
 
 Single self-contained HTML file with:
+  - Modern card-based UI (Inter font, semantic color palette, KPI tiles)
+  - Tabs: Overview, All Names (full 366), Movers, Flags, Watchlist
   - Glossary explaining every metric
-  - Methodology section (collapsed)
-  - Top 25 hot / cold tables, 7d movers, compound flags, earnings soon, watchlist
-  - Per-ticker drill-down with sparkline + signal-by-signal breakdown +
-    estimates overlay + analyst actions + notes
-  - JS-powered search/filter, sector-group filter, CSV export
+  - Full sortable/searchable all-names table (all 366)
+  - Per-ticker drill-down with sparkline + signals + estimates overlay + actions
+  - JS-powered search/filter across tables AND drill-down sections
+  - Cluster + sector group filters
+  - CSV export
   - Backtest summary card
   - Provenance footer
 """
@@ -60,6 +62,21 @@ def fmt_int(v):
         return "—"
 
 
+def temp_class(v):
+    if v is None or pd.isna(v):
+        return ""
+    v = float(v)
+    if v >= 85:
+        return "ext-hot"
+    if v >= 70:
+        return "hot"
+    if v <= 15:
+        return "ext-cold"
+    if v <= 30:
+        return "cold"
+    return "neutral"
+
+
 def load_data():
     conn = connect()
     latest = conn.execute("SELECT MAX(date) FROM composite_daily").fetchone()[0]
@@ -71,6 +88,7 @@ def load_data():
     universe = pd.read_csv(project_path("data/universe.csv"))
     snap = snap.merge(universe, on="ticker", how="left")
     snap["name"] = snap["name"].fillna(snap["ticker"])
+    snap["mcap_b"] = snap["market_cap"] / 1e9 if "market_cap" in snap.columns else None
 
     # 7-day prior snapshot for change
     recent = pd.read_sql_query(
@@ -84,18 +102,18 @@ def load_data():
             snap = snap.merge(chg7, on="ticker", how="left")
         else:
             snap["temp_7d_chg"] = None
+    else:
+        snap["temp_7d_chg"] = None
 
-    # Newly-triggered late_signal/washout flags in last 7 days
+    # Newly-triggered flags in last 7 days
     recent_flags = pd.read_sql_query(
         """
         SELECT ticker, date, flag_late_signal, flag_washout
-        FROM composite_daily
-        WHERE date >= date(?, '-14 days')
+        FROM composite_daily WHERE date >= date(?, '-14 days')
         """,
         conn, params=(latest,), parse_dates=["date"],
     )
-    new_late = []
-    new_wash = []
+    new_late, new_wash = [], []
     if not recent_flags.empty:
         for t, grp in recent_flags.groupby("ticker"):
             grp = grp.sort_values("date")
@@ -108,26 +126,24 @@ def load_data():
             if wash_today and not wash_week_ago:
                 new_wash.append(t)
 
-    # Per-ticker temperature sparkline data (last ~30 days)
+    # Sparklines (last ~30 days)
     spark_df = pd.read_sql_query(
         "SELECT ticker, date, temperature FROM composite_daily WHERE date >= date(?, '-45 days')",
         conn, params=(latest,), parse_dates=["date"],
     )
-    sparkline_data: dict[str, list[float]] = {}
+    sparkline_data = {}
     if not spark_df.empty:
         for t, grp in spark_df.groupby("ticker"):
             vals = grp.sort_values("date")["temperature"].dropna().tolist()
             if vals:
                 sparkline_data[t] = vals[-30:]
 
-    # Per-ticker per-signal data (latest day only, for drill-down)
+    # Per-ticker per-signal data (latest day)
     sig_long = pd.read_sql_query(
-        """SELECT ticker, signal_name, bucket, raw_value, pct_self, pct_peer
-           FROM signals_daily WHERE date = ?""",
+        "SELECT ticker, signal_name, bucket, raw_value, pct_self, pct_peer FROM signals_daily WHERE date = ?",
         conn, params=(latest,),
     )
 
-    # Estimates / earnings calendar / analyst actions
     estimates = pd.read_sql_query(
         "SELECT * FROM estimates_daily WHERE date = (SELECT MAX(date) FROM estimates_daily)",
         conn,
@@ -135,24 +151,16 @@ def load_data():
     earnings = pd.read_sql_query("SELECT * FROM earnings_calendar", conn)
     actions = pd.read_sql_query(
         """SELECT ticker, action_date, firm, from_grade, to_grade, action
-           FROM analyst_actions
-           WHERE action_date >= date('now', '-90 days')
+           FROM analyst_actions WHERE action_date >= date('now', '-90 days')
            ORDER BY action_date DESC""",
         conn,
     )
 
-    # Notes + watchlist
     notes = pd.read_sql_query("SELECT ticker, note, updated_at FROM ticker_notes", conn)
     watchlist = pd.read_sql_query("SELECT ticker, label FROM watchlist", conn)
 
-    # Provenance — ingestion timestamps from each ingestion's status file
-    provenance = compute_provenance()
-
-    # Backtest summary
     backtest_path = project_path("data/backtest_results.json")
-    backtest_results = []
-    if backtest_path.exists():
-        backtest_results = json.loads(backtest_path.read_text())
+    backtest_results = json.loads(backtest_path.read_text()) if backtest_path.exists() else []
 
     conn.close()
     return {
@@ -167,13 +175,12 @@ def load_data():
         "sparklines": sparkline_data,
         "new_late": new_late,
         "new_wash": new_wash,
-        "provenance": provenance,
+        "provenance": compute_provenance(),
         "backtest_results": backtest_results,
     }
 
 
 def compute_provenance() -> dict[str, str]:
-    """Last-modified time per status JSON in logs/."""
     logs = project_path("logs")
     out = {}
     if not logs.exists():
@@ -208,88 +215,28 @@ SIGNAL_DESCRIPTIONS = {
     "ret_3m": ("3-month return", "Trailing 63-day return."),
     "ret_6m": ("6-month return", "Trailing 126-day return."),
     "ret_12m": ("12-month return (overlay)", "Trailing 252-day return. Trend signal — overlay only."),
-    "dist_200ma": ("Distance from 200d MA", "(price − 200-day moving average) / 200d MA."),
+    "dist_200ma": ("Distance from 200d MA", "(price − 200d MA) / 200d MA."),
     "rsi_14": ("RSI(14)", "14-period Wilder RSI. >70 overbought, <30 oversold."),
-    "pct_from_52w_high": ("% from 52w high", "Price relative to trailing 52-week high (0 = at high, negative = below)."),
-    "rs_vs_qqq_3m": ("RS vs QQQ (overlay)", "3-month return − QQQ 3-month return. Trend signal — overlay only."),
-    "rs_vs_xlk_3m": ("RS vs XLK (overlay)", "3-month return − XLK 3-month return. Trend signal — overlay only."),
-    "ttm_pe": ("TTM P/E", "Price ÷ trailing-12-month diluted EPS."),
-    "ev_sales": ("EV/Sales (TTM)", "(Mkt cap + debt − cash) ÷ trailing-12m revenue."),
-    "insider_net_90d_signed": ("Insider net 90d (signed)", "Σ Form 4 net $ (purchases − sales) over trailing 90 days."),
-    "insider_net_90d_abs": ("Insider |net 90d| (overlay)", "Magnitude of insider activity. Overlay — high absolute activity is trend, not contrarian."),
-    "short_volume_ratio_14d": ("Short volume 14d ratio", "FINRA Reg SHO daily short-vol ÷ total-vol, 14d rolling avg. Proxy for shorting pressure (level differs from true SI)."),
-    "si_true_dtc": ("Short interest days-to-cover", "NASDAQ true SI ÷ avg daily share volume. Bi-monthly settlement, NASDAQ-listed only. STRONGEST contrarian signal in panel."),
-    "hf_count_13f": ("HF count 13F (overlay)", "Number of curated HFs holding the name (40-fund universe). Trend signal — high count tends to persist."),
+    "pct_from_52w_high": ("% from 52w high", "Price relative to trailing 52-week high."),
+    "rs_vs_qqq_3m": ("RS vs QQQ (overlay)", "3m return − QQQ 3m return. Trend."),
+    "rs_vs_xlk_3m": ("RS vs XLK (overlay)", "3m return − XLK 3m return. Trend."),
+    "ttm_pe": ("TTM P/E", "Price ÷ trailing-12m diluted EPS."),
+    "ev_sales": ("EV/Sales (TTM)", "(Market cap + debt − cash) ÷ trailing-12m revenue."),
+    "insider_net_90d_signed": ("Insider net 90d (signed)", "Σ Form 4 net $ over trailing 90d."),
+    "insider_net_90d_abs": ("Insider |net 90d| (overlay)", "Magnitude of insider activity."),
+    "short_volume_ratio_14d": ("Short volume 14d ratio", "FINRA Reg SHO short-vol/total-vol, 14d avg."),
+    "si_true_dtc": ("Short interest days-to-cover", "NASDAQ true SI ÷ avg daily share volume."),
+    "hf_count_13f": ("HF count 13F (overlay)", "# of curated HFs holding the name."),
     "hf_top_concentration": ("HF top-5 concentration (overlay)", "Top-5 HFs' $ as % of total HF $ in name."),
-    "hf_count_change_4q": ("HF count Δ4q (overlay)", "Quarter-over-quarter change in HF holders (lagged ~90d)."),
+    "hf_count_change_4q": ("HF count Δ4q (overlay)", "Q/Q change in HF holders."),
 }
 
 
-GLOSSARY = """
-<details open class="glossary">
-<summary><h2 style="display:inline">📘 Glossary — what every number means</h2></summary>
-
-<div class="gloss-grid">
-<div class="gloss-card">
-<h4>Temperature (0–100)</h4>
-<p>The composite "how hot/late" score. Each name is ranked vs its own trailing 5y history (0 = coldest ever, 100 = hottest ever) AND vs cluster peers, then those two are blended. The composite averages bucket scores. <b>High temperature = positioning + momentum + valuation are all stretched ⇒ historically associated with negative forward returns at extremes (V1.4 backtest IC −0.022 at 3m).</b></p>
-</div>
-
-<div class="gloss-card">
-<h4>Bucket scores (Pos / Val / Tech)</h4>
-<p>Each is 0–100, average of the underlying signals (each signal scored as percentile vs own history & cluster peers). Click any ticker to see the signal-by-signal breakdown.</p>
-<ul>
-<li><b>Pos</b> — Positioning (insider Form 4, short volume, true SI)</li>
-<li><b>Val</b> — Valuation (TTM P/E, EV/Sales)</li>
-<li><b>Tech</b> — Technical/momentum (returns, RSI, distance from 200d MA, % from 52w high)</li>
-</ul>
-</div>
-
-<div class="gloss-card">
-<h4>Conviction (0–100)</h4>
-<p>How much the buckets <i>agree</i>. High conviction = all buckets pointing the same way (all hot, or all cold). Low conviction = buckets disagree (e.g., expensive valuation but cold technicals — value-trap risk). 100 = perfect agreement; 0 = wide spread.</p>
-</div>
-
-<div class="gloss-card">
-<h4>Anomaly count</h4>
-<p>Number of individual signals where this ticker is at the 90th+ percentile vs its cluster peers <i>today</i>. High = name stands out from peers across many measures. Low = blends in.</p>
-</div>
-
-<div class="gloss-card">
-<h4>7d Δ (temperature change)</h4>
-<p>Today's temperature minus temperature 5 trading days ago. Catches names heating up or cooling off recently. Positive (red) = heating up. Negative (green, contrarian-favorable) = cooling.</p>
-</div>
-
-<div class="gloss-card">
-<h4>Compound flags</h4>
-<ul>
-<li><b>Late</b> — Pos ≥ 85, Val ≥ 80, Tech ≥ 85. Triple-extreme stretched.</li>
-<li><b>Wash</b> — Pos ≤ 15, Val ≤ 25, Tech ≤ 15. Triple-extreme washed-out.</li>
-<li><b>Earnings</b> — earnings within next 14 days.</li>
-</ul>
-</div>
-
-<div class="gloss-card">
-<h4>Why colors are inverted</h4>
-<p>This tool is contrarian-oriented: high temperature = "overheated, expect mean reversion" = <b>red/danger</b>. Low temperature = "washed out, expect bounce" = <b>green/opportunity</b>. Opposite of typical price-momentum coloring.</p>
-</div>
-
-<div class="gloss-card">
-<h4>Backtest validation</h4>
-<p>V1.4 composite IC −0.022 at 3-month forward horizon (Spearman). Bottom decile → 56% positive forward return; top decile → 56% negative forward return. Strongest individual signal: <code>si_true_dtc</code> (NASDAQ days-to-cover) IC −0.064 at 3m. See backtest_report.md for full per-signal metrics.</p>
-</div>
-
-</div>
-</details>
-"""
-
-
-def render_table(df: pd.DataFrame, title: str, subtitle: str = "", extra_cols: list = None,
-                  empty_msg: str = "(none)") -> str:
+def render_summary_table(df: pd.DataFrame, title: str, subtitle: str = "",
+                          empty_msg: str = "(none)", panel_id: str = "") -> str:
     if df.empty:
-        return f"<section><h3>{title}</h3>{f'<p class=hint>{subtitle}</p>' if subtitle else ''}<p class=empty>{empty_msg}</p></section>"
+        return f'<div class="panel" id="{panel_id}"><h3>{title}</h3>{f"<p class=hint>{subtitle}</p>" if subtitle else ""}<p class=empty>{empty_msg}</p></div>'
 
-    extra_cols = extra_cols or []
     rows = []
     for _, r in df.iterrows():
         late = "🔥" if r.get("flag_late_signal") == 1 else ""
@@ -297,59 +244,59 @@ def render_table(df: pd.DataFrame, title: str, subtitle: str = "", extra_cols: l
         ern = "📅" if r.get("flag_earnings_soon") == 1 else ""
         chg = r.get("temp_7d_chg")
         chg_str = f"{chg:+.1f}" if pd.notna(chg) else "—"
-        chg_class = "pos" if (pd.notna(chg) and chg > 0) else ("neg" if pd.notna(chg) and chg < 0 else "")
+        chg_class = "chg-up" if (pd.notna(chg) and chg > 0) else ("chg-down" if pd.notna(chg) and chg < 0 else "")
         ticker = r["ticker"]
-        name = (r.get("name") or "")[:40]
+        name = (r.get("name") or "")[:38]
+        tcls = temp_class(r.get("temperature"))
         rows.append(f"""
             <tr data-ticker="{ticker}">
-                <td><a href="#t-{ticker}" class=ticker-link>{ticker}</a></td>
+                <td><a href="#t-{ticker}" class=ticker-pill>{ticker}</a></td>
                 <td class=name>{name}</td>
-                <td class=temp>{fmt(r.get('temperature'))}</td>
-                <td class="chg {chg_class}">{chg_str}</td>
-                <td class=bk>{fmt(r.get('score_positioning'))}</td>
-                <td class=bk>{fmt(r.get('score_valuation'))}</td>
-                <td class=bk>{fmt(r.get('score_technical'))}</td>
-                <td class=bk title="Conviction (bucket agreement, 0=disagree, 100=agree)">{fmt(r.get('conviction'))}</td>
-                <td class=bk title="Anomaly count (# signals at 90th+ %ile vs cluster peers)">{fmt(r.get('anomaly_count'), places=0)}</td>
-                <td class=flag>{late}{wash}{ern}</td>
+                <td class="num temp {tcls}">{fmt(r.get('temperature'))}</td>
+                <td class="num {chg_class}">{chg_str}</td>
+                <td class=num>{fmt(r.get('score_positioning'))}</td>
+                <td class=num>{fmt(r.get('score_valuation'))}</td>
+                <td class=num>{fmt(r.get('score_technical'))}</td>
+                <td class="num conv">{fmt(r.get('conviction'))}</td>
+                <td class="num anom">{fmt(r.get('anomaly_count'), places=0)}</td>
+                <td class=flagcol>{late}{wash}{ern}</td>
             </tr>
         """)
     return f"""
-    <section>
+    <div class="panel" id="{panel_id}">
         <h3>{title}</h3>
         {f'<p class=hint>{subtitle}</p>' if subtitle else ''}
+        <div class="table-wrap">
         <table class=rank>
             <thead>
                 <tr>
-                    <th title="Click to drill down">Ticker</th>
+                    <th>Ticker</th>
                     <th>Name</th>
-                    <th title="Composite score 0-100. Higher = hotter (more contrarian-bearish)">Temp</th>
-                    <th title="7-day change in temperature">7d Δ</th>
-                    <th title="Positioning bucket (insider, short interest)">Pos</th>
-                    <th title="Valuation bucket (TTM P/E, EV/Sales)">Val</th>
-                    <th title="Technical bucket (returns, RSI, distance from MA)">Tech</th>
-                    <th title="Conviction (bucket agreement 0-100)">Conv</th>
-                    <th title="# signals at 90th+ %ile vs cluster peers">Anom</th>
-                    <th>Flags</th>
+                    <th class=num title="Composite 0-100. High=hot/late (contrarian-bearish). Low=cold/washed (contrarian-bullish)">Temp</th>
+                    <th class=num title="7-day change in temperature">7d Δ</th>
+                    <th class=num title="Positioning bucket">Pos</th>
+                    <th class=num title="Valuation bucket">Val</th>
+                    <th class=num title="Technical bucket">Tech</th>
+                    <th class=num title="Conviction (bucket agreement)">Conv</th>
+                    <th class=num title="# signals at 90th+ %ile vs cluster peers">Anom</th>
+                    <th title="🔥 late · ❄️ wash · 📅 earnings within 14d">Flags</th>
                 </tr>
             </thead>
             <tbody>{''.join(rows)}</tbody>
         </table>
-    </section>
+        </div>
+    </div>
     """
 
 
-def render_drilldown(snap_row: pd.Series, sig_long: pd.DataFrame, est_row,
-                      earnings_row, actions: pd.DataFrame,
-                      sparkline: list, notes_row, sector_groups: dict,
-                      cluster_mates: list, sector_mates: dict[str, list]) -> str:
+def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
+                     sparkline, notes_row, sector_groups, cluster_mates, sector_mates) -> str:
     t = snap_row["ticker"]
     name = snap_row.get("name") or t
 
-    # Sparkline SVG
     spark_svg = ""
     if sparkline and len(sparkline) > 1:
-        w, h, pad = 220, 40, 2
+        w, h, pad = 280, 60, 4
         mn = min(sparkline)
         mx = max(sparkline)
         rng = (mx - mn) or 1
@@ -359,107 +306,126 @@ def render_drilldown(snap_row: pd.Series, sig_long: pd.DataFrame, est_row,
             y = h - pad - (v - mn) / rng * (h - 2 * pad)
             pts.append(f"{x:.1f},{y:.1f}")
         polyline = " ".join(pts)
-        last_color = "#c53030" if sparkline[-1] >= 70 else ("#2e7d32" if sparkline[-1] <= 30 else "#666")
+        last_v = sparkline[-1]
+        last_color = "#dc2626" if last_v >= 70 else ("#10b981" if last_v <= 30 else "#6366f1")
+        # Reference line at temperature 50
+        y50 = h - pad - (50 - mn) / rng * (h - 2 * pad) if mn <= 50 <= mx else None
+        ref_line = f'<line x1="{pad}" y1="{y50:.1f}" x2="{w - pad}" y2="{y50:.1f}" stroke="#e2e8f0" stroke-dasharray="3,3"/>' if y50 else ""
         spark_svg = f"""
         <svg class=spark width="{w}" height="{h}" viewBox="0 0 {w} {h}" aria-label="30-day temperature sparkline">
-            <polyline fill="none" stroke="{last_color}" stroke-width="1.5" points="{polyline}" />
-            <line x1="{pad}" y1="{h - pad - (50 - mn) / rng * (h - 2 * pad):.1f}" x2="{w - pad}" y2="{h - pad - (50 - mn) / rng * (h - 2 * pad):.1f}" stroke="#ddd" stroke-dasharray="2,2"/>
+            {ref_line}
+            <polyline fill="none" stroke="{last_color}" stroke-width="2" points="{polyline}" />
+            <circle cx="{pts[-1].split(',')[0]}" cy="{pts[-1].split(',')[1]}" r="3" fill="{last_color}"/>
         </svg>
-        <span class=hint>last {len(sparkline)}d, range {mn:.0f}–{mx:.0f}</span>
+        <div class=spark-meta>last {len(sparkline)} days · range {mn:.0f}–{mx:.0f}</div>
         """
 
-    # Per-signal table
     sig_rows = []
     if not sig_long.empty:
         for _, sr in sig_long.iterrows():
             sn = sr["signal_name"]
             label, _ = SIGNAL_DESCRIPTIONS.get(sn, (sn, ""))
+            ps = sr.get("pct_self")
+            pp = sr.get("pct_peer")
+            ps_cls = temp_class(ps) if ps is not None else ""
+            pp_cls = temp_class(pp) if pp is not None else ""
             sig_rows.append(f"""
                 <tr>
                     <td>{label}</td>
                     <td class=mono>{sr['bucket']}</td>
-                    <td class=mono>{fmt(sr['raw_value'], 4)}</td>
-                    <td class=bk>{fmt(sr['pct_self'])}</td>
-                    <td class=bk>{fmt(sr['pct_peer'])}</td>
+                    <td class="num mono">{fmt(sr['raw_value'], 4)}</td>
+                    <td class="num {ps_cls}">{fmt(ps)}</td>
+                    <td class="num {pp_cls}">{fmt(pp)}</td>
                 </tr>
             """)
     sig_table = f"""
+        <h4>📊 Signal-by-signal breakdown</h4>
         <table class=signals>
-            <thead><tr><th>Signal</th><th>Bucket</th><th>Raw</th><th>%ile self (5y)</th><th>%ile peer (cluster)</th></tr></thead>
+            <thead><tr><th>Signal</th><th>Bucket</th><th class=num>Raw value</th>
+                <th class=num title="Percentile vs own 5-year history">%ile (self)</th>
+                <th class=num title="Percentile vs cluster peers">%ile (peer)</th></tr></thead>
             <tbody>{''.join(sig_rows) if sig_rows else '<tr><td colspan=5 class=empty>(no signals)</td></tr>'}</tbody>
         </table>
     """
 
-    # Estimates / earnings overlay
     est_html = ""
     if est_row is not None and isinstance(est_row, pd.Series):
+        rec_key = est_row.get('recommendation_key', '—') or '—'
+        rec_class = "rec-buy" if rec_key in ("strong_buy", "buy") else ("rec-sell" if rec_key in ("sell", "strong_sell") else "")
         est_html = f"""
         <div class=card>
-            <h4>📊 Live overlay (Yahoo/FactSet — context, not in composite)</h4>
-            <table class=overlay>
-                <tr><td>Forward EPS</td><td>{fmt(est_row.get('forward_eps'), 2)}</td>
-                    <td>Trailing EPS</td><td>{fmt(est_row.get('trailing_eps'), 2)}</td></tr>
-                <tr><td>Target mean</td><td>${fmt(est_row.get('target_mean_price'), 2)}</td>
-                    <td>Target dispersion</td><td>{fmt(est_row.get('target_dispersion'), 2)}</td></tr>
-                <tr><td># analyst opinions</td><td>{fmt_int(est_row.get('num_analyst_opinions'))}</td>
-                    <td>Recommendation</td><td>{est_row.get('recommendation_key', '—') or '—'} ({fmt(est_row.get('recommendation_mean'), 2)})</td></tr>
-            </table>
+            <h4>📊 Live overlay (Yahoo / consensus snapshot)</h4>
+            <div class=overlay-grid>
+                <div><span class=overlay-label>Forward EPS</span><span class=overlay-val>{fmt(est_row.get('forward_eps'), 2)}</span></div>
+                <div><span class=overlay-label>Trailing EPS</span><span class=overlay-val>{fmt(est_row.get('trailing_eps'), 2)}</span></div>
+                <div><span class=overlay-label>Target mean</span><span class=overlay-val>${fmt(est_row.get('target_mean_price'), 2)}</span></div>
+                <div><span class=overlay-label>Target dispersion</span><span class=overlay-val>{fmt(est_row.get('target_dispersion'), 2)}</span></div>
+                <div><span class=overlay-label># analysts</span><span class=overlay-val>{fmt_int(est_row.get('num_analyst_opinions'))}</span></div>
+                <div><span class=overlay-label>Recommendation</span><span class="overlay-val {rec_class}">{rec_key} ({fmt(est_row.get('recommendation_mean'), 2)})</span></div>
+            </div>
         </div>
         """
 
-    # Earnings date
     erng_html = ""
     if earnings_row is not None:
         nd = earnings_row.get("next_earnings_date") if hasattr(earnings_row, "get") else None
         if nd:
-            erng_html = f"<p class=hint>📅 Next earnings: <b>{nd}</b></p>"
+            erng_html = f'<div class=tag-earnings>📅 Next earnings: <b>{nd}</b></div>'
 
-    # Recent actions
     act_html = ""
     if not actions.empty:
         act_rows = []
-        for _, ar in actions.head(8).iterrows():
-            act_rows.append(f"<tr><td>{ar['action_date']}</td><td>{ar['firm']}</td><td>{ar['from_grade'] or '—'} → {ar['to_grade'] or '—'}</td><td class=mono>{ar['action']}</td></tr>")
+        for _, ar in actions.head(10).iterrows():
+            act_rows.append(f"<tr><td class=mono>{ar['action_date']}</td><td>{ar['firm']}</td><td>{ar['from_grade'] or '—'} → {ar['to_grade'] or '—'}</td><td class=mono>{ar['action']}</td></tr>")
         act_html = f"""
         <div class=card>
-            <h4>🎯 Recent analyst actions (last 90d)</h4>
-            <table class=overlay><thead><tr><th>Date</th><th>Firm</th><th>Action</th><th>Type</th></tr></thead>
+            <h4>🎯 Analyst actions (last 90d)</h4>
+            <table class=actions><thead><tr><th>Date</th><th>Firm</th><th>Action</th><th>Type</th></tr></thead>
             <tbody>{''.join(act_rows)}</tbody></table>
         </div>
         """
 
-    # Cluster + sector mates
     mates_html = ""
     if cluster_mates:
-        mates_html += f"<p class=hint>🧬 Cluster peers: {', '.join(f'<a href=\"#t-{m}\">{m}</a>' for m in cluster_mates[:12])}</p>"
+        mates_html += f'<div class=peer-row><span class=peer-label>🧬 Cluster:</span> {", ".join(f"<a href=#t-{m} class=peer-link>{m}</a>" for m in cluster_mates[:12])}</div>'
     if sector_mates:
         for sg, members in sector_mates.items():
             sg_label = sector_groups.get(sg, {}).get("label", sg)
-            mates_html += f"<p class=hint>🏷️ {sg_label}: {', '.join(f'<a href=\"#t-{m}\">{m}</a>' for m in members[:10] if m != t)}</p>"
+            mates_html += f'<div class=peer-row><span class=peer-label>🏷️ {sg_label}:</span> {", ".join(f"<a href=#t-{m} class=peer-link>{m}</a>" for m in members[:10] if m != t)}</div>'
 
-    # Notes
     notes_text = ""
     if notes_row is not None and isinstance(notes_row, pd.Series):
         notes_text = notes_row.get("note", "") or ""
     notes_html = f"""
     <div class=card>
         <h4>📝 Notes</h4>
-        <pre class=notes>{notes_text or '(no notes — edit via SQLite)'}</pre>
+        <pre class=notes>{notes_text or '(no notes — edit via SQLite: INSERT OR REPLACE INTO ticker_notes (ticker, note, updated_at) VALUES (...))'}</pre>
     </div>
     """
 
+    temp_v = snap_row.get('temperature')
+    temp_cls = temp_class(temp_v)
+    chg7 = snap_row.get('temp_7d_chg')
+
     return f"""
-    <section class=drilldown id="t-{t}">
-        <h3>{t} — {name} <a class=back href="#top" title="Back to top">↑</a></h3>
-        <div class=summary>
-            <div>
-                <p><b>Temperature:</b> <span class="big {('hot' if (snap_row.get('temperature') or 0) >= 70 else ('cold' if (snap_row.get('temperature') or 0) <= 30 else ''))}">{fmt(snap_row.get('temperature'))}</span>
-                {f"  ({fmt(snap_row.get('temp_7d_chg'), 1)} 7d)" if pd.notna(snap_row.get('temp_7d_chg')) else ''}</p>
-                <p>Pos {fmt(snap_row.get('score_positioning'))} · Val {fmt(snap_row.get('score_valuation'))} · Tech {fmt(snap_row.get('score_technical'))}</p>
-                <p>Conviction: {fmt(snap_row.get('conviction'))} · Anomaly: {fmt(snap_row.get('anomaly_count'), 0)}</p>
+    <section class=drilldown id="t-{t}" data-ticker="{t}">
+        <div class=drilldown-header>
+            <div class=drilldown-title>
+                <h3><a href="#top" class=back title="back to top">↑</a> {t}<span class=ticker-name>{name}</span></h3>
                 {erng_html}
             </div>
-            <div>{spark_svg}</div>
+            <div class=drilldown-temp>
+                <div class="temp-big {temp_cls}">{fmt(temp_v)}</div>
+                <div class=temp-sub>Temperature {f"<span class={('chg-up' if chg7>0 else 'chg-down') if pd.notna(chg7) else ''}>{chg7:+.1f}</span> 7d" if pd.notna(chg7) else ''}</div>
+            </div>
+        </div>
+        <div class=drilldown-stats>
+            <div class=stat><span class=stat-label>Pos</span><span class="stat-val {temp_class(snap_row.get('score_positioning'))}">{fmt(snap_row.get('score_positioning'))}</span></div>
+            <div class=stat><span class=stat-label>Val</span><span class="stat-val {temp_class(snap_row.get('score_valuation'))}">{fmt(snap_row.get('score_valuation'))}</span></div>
+            <div class=stat><span class=stat-label>Tech</span><span class="stat-val {temp_class(snap_row.get('score_technical'))}">{fmt(snap_row.get('score_technical'))}</span></div>
+            <div class=stat><span class=stat-label>Conv</span><span class=stat-val>{fmt(snap_row.get('conviction'))}</span></div>
+            <div class=stat><span class=stat-label>Anom</span><span class=stat-val>{fmt(snap_row.get('anomaly_count'), 0)}</span></div>
+            <div class=stat-spark>{spark_svg}</div>
         </div>
         {sig_table}
         {est_html}
@@ -477,9 +443,9 @@ def render_provenance(prov: dict) -> str:
     if not rows:
         return ""
     return f"""
-    <details class=prov>
+    <details class=footer-card>
     <summary>🕒 Data provenance — last refresh per provider</summary>
-    <table class=overlay><thead><tr><th>Provider</th><th>Last refresh</th></tr></thead>
+    <table class=actions><thead><tr><th>Provider</th><th>Last refresh</th></tr></thead>
     <tbody>{''.join(rows)}</tbody></table>
     </details>
     """
@@ -491,33 +457,98 @@ def render_backtest_card(results: list) -> str:
     composite = [r for r in results if r["signal"] == "COMPOSITE_TEMPERATURE"]
     sig_results = [r for r in results if r["signal"] != "COMPOSITE_TEMPERATURE"]
 
-    # Per-signal best IC table
     by_sig = {}
     for r in sig_results:
         s = r["signal"]
         if s not in by_sig or (r.get("ic") is not None and abs(r["ic"]) > abs(by_sig[s].get("ic") or 0)):
             by_sig[s] = r
+
     rows = []
-    for s in sorted(by_sig.keys(), key=lambda x: abs(by_sig[x].get("ic") or 0), reverse=True)[:10]:
+    for s in sorted(by_sig.keys(), key=lambda x: abs(by_sig[x].get("ic") or 0), reverse=True)[:12]:
         r = by_sig[s]
         ic = r.get("ic")
         ic_str = f"{ic:+.4f}" if ic is not None else "—"
-        ic_class = "neg" if (ic is not None and ic < 0) else ("pos" if ic is not None and ic > 0 else "")
-        rows.append(f"<tr><td class=mono>{s}</td><td>{r['kind']} @ {r['horizon']}</td><td class=mono><span class={ic_class}>{ic_str}</span></td><td class=bk>{r.get('top_hit_rate', 0):.1%}</td><td class=bk>{r.get('bot_hit_rate', 0):.1%}</td></tr>")
+        ic_cls = "chg-down" if (ic is not None and ic < 0) else ("chg-up" if ic is not None and ic > 0 else "")
+        rows.append(f"<tr><td class=mono>{s}</td><td class=mono>{r['kind']} @ {r['horizon']}</td><td class='num mono {ic_cls}'>{ic_str}</td><td class=num>{r.get('top_hit_rate', 0):.1%}</td><td class=num>{r.get('bot_hit_rate', 0):.1%}</td></tr>")
 
     comp_rows = []
     for r in composite:
         ic = r.get("ic")
-        comp_rows.append(f"<tr><td>Composite (V1.4)</td><td>{r['horizon']}</td><td class=mono><span class={'neg' if ic and ic < 0 else 'pos'}>{ic:+.4f}</span></td><td class=bk>{r['top_hit_rate']:.1%}</td><td class=bk>{r['bot_hit_rate']:.1%}</td></tr>")
+        ic_cls = "chg-down" if ic and ic < 0 else "chg-up"
+        comp_rows.append(f"<tr><td><b>Composite (V1.4)</b></td><td>{r['horizon']}</td><td class='num mono {ic_cls}'>{ic:+.4f}</td><td class=num>{r['top_hit_rate']:.1%}</td><td class=num>{r['bot_hit_rate']:.1%}</td></tr>")
 
     return f"""
-    <details class=backtest>
-    <summary><h3 style=display:inline>📈 Backtest validation (V1.4)</h3></summary>
-    <p class=hint>Information Coefficient (Spearman) per signal vs forward returns. Negative IC = contrarian (high signal predicts negative forward return). Top/bot hit rates measure decile reliability.</p>
-    <table class=overlay><thead><tr><th>Signal</th><th>Best</th><th>IC</th><th>Top hit</th><th>Bot hit</th></tr></thead>
-    <tbody>{''.join(comp_rows)}{''.join(rows)}</tbody></table>
-    </details>
+    <div class="panel" id="backtest-panel">
+        <h3>📈 Backtest validation (V1.4)</h3>
+        <p class=hint>Information Coefficient (Spearman) per signal vs forward returns. <b class=chg-down>Negative IC</b> = contrarian (high signal predicts negative forward return). Top/bot hit rates measure decile reliability.</p>
+        <div class=table-wrap>
+        <table class=signals>
+            <thead><tr><th>Signal</th><th>Best</th><th class=num>IC</th><th class=num>Top hit</th><th class=num>Bot hit</th></tr></thead>
+            <tbody>{''.join(comp_rows)}{''.join(rows)}</tbody>
+        </table>
+        </div>
+    </div>
     """
+
+
+def render_glossary() -> str:
+    return """
+<details open class=glossary>
+<summary><h2>📘 Glossary — what every number means</h2></summary>
+<div class=gloss-grid>
+
+<div class=gloss-card>
+<h4>Temperature (0–100)</h4>
+<p>The composite "how hot/late" score. Each signal is ranked vs its own trailing 5y history (0=coldest ever, 100=hottest ever) AND vs cluster peers, then blended 50/50. Bucket scores average their signals; composite averages buckets. <b>High temperature ⇒ stretched positioning + momentum + valuation, historically associated with negative forward returns at extremes (V1.4 backtest IC −0.022 at 3m).</b></p>
+</div>
+
+<div class=gloss-card>
+<h4>Bucket scores (Pos / Tech)</h4>
+<p>Each 0–100, average of underlying signals (each signal a percentile vs own history & cluster peers).</p>
+<ul>
+<li><b>Pos</b> — Positioning (insider Form 4, FINRA short volume, NASDAQ true SI days-to-cover)</li>
+<li><b>Tech</b> — Technical/momentum: sentiment expressed via price action (returns, RSI, distance from 200d MA, % from 52w high)</li>
+</ul>
+<p><b>Val</b> (TTM P/E, EV/Sales) is shown on drill-downs as overlay context but <b>NOT</b> in the composite — V1.5 design choice: tool measures sentiment/positioning only, valuation is fundamental analysis you do separately.</p>
+</div>
+
+<div class=gloss-card>
+<h4>Conviction (0–100)</h4>
+<p>How much the buckets <i>agree</i>. High conviction = all buckets pointing same way (all hot, or all cold). Low = mixed signals (e.g., expensive valuation but cold technicals — value-trap risk).</p>
+</div>
+
+<div class=gloss-card>
+<h4>Anomaly count</h4>
+<p>Number of signals where this name is at the 90th+ percentile vs its cluster peers <i>today</i>. High = stands out from peers across many measures.</p>
+</div>
+
+<div class=gloss-card>
+<h4>7d Δ (temperature change)</h4>
+<p>Today's temperature minus 5 trading days ago. <span class=chg-up>Red/positive</span> = heating up. <span class=chg-down>Green/negative</span> = cooling off (contrarian-favorable).</p>
+</div>
+
+<div class=gloss-card>
+<h4>Compound flags</h4>
+<ul>
+<li><b>🔥 Late</b> — Positioning ≥ 85 AND Technical ≥ 85. Both buckets triple-extreme.</li>
+<li><b>❄️ Washout</b> — Positioning ≤ 15 AND Technical ≤ 15. Both buckets triple-extreme washed.</li>
+<li><b>📅 Earnings</b> — earnings reporting within next 14 days.</li>
+</ul>
+</div>
+
+<div class=gloss-card>
+<h4>Color coding (contrarian)</h4>
+<p><span class=chg-up>Red</span> = hot/extended/dangerous. <span class=chg-down>Green</span> = cold/washed-out/opportunity. Inverted from typical price-momentum coloring because this tool is contrarian.</p>
+</div>
+
+<div class=gloss-card>
+<h4>Backtest validation (V1.4)</h4>
+<p>Composite IC −0.022 at 3-month forward (Spearman). Bottom-decile temperature → 56% positive forward return; top-decile → 56% negative. Strongest individual signal: <code>si_true_dtc</code> (NASDAQ days-to-cover) IC −0.064 at 3m.</p>
+</div>
+
+</div>
+</details>
+"""
 
 
 def main(asof: str | None = None):
@@ -527,22 +558,19 @@ def main(asof: str | None = None):
     asof = data["latest"]
     sector_groups = load_sector_groups()
 
-    # Watchlist tickers as set
     wl_tickers = set(data["watchlist"]["ticker"]) if not data["watchlist"].empty else set()
-    snap["watched"] = snap["ticker"].isin(wl_tickers)
 
-    # Cluster + sector mate maps
     cluster_to_tickers = snap.groupby("cluster_id")["ticker"].apply(list).to_dict() if "cluster_id" in snap.columns else {}
     ticker_to_sectors = {}
     for sg, info in sector_groups.items():
         for t in info["tickers"]:
             ticker_to_sectors.setdefault(t, []).append(sg)
 
-    # Sort/select panels
+    # Panels
     hottest = snap.dropna(subset=["temperature"]).nlargest(25, "temperature")
     coldest = snap.dropna(subset=["temperature"]).nsmallest(25, "temperature")
-    movers_up = snap.dropna(subset=["temp_7d_chg"]).nlargest(15, "temp_7d_chg") if "temp_7d_chg" in snap.columns else pd.DataFrame()
-    movers_down = snap.dropna(subset=["temp_7d_chg"]).nsmallest(15, "temp_7d_chg") if "temp_7d_chg" in snap.columns else pd.DataFrame()
+    movers_up = snap.dropna(subset=["temp_7d_chg"]).nlargest(20, "temp_7d_chg")
+    movers_down = snap.dropna(subset=["temp_7d_chg"]).nsmallest(20, "temp_7d_chg")
     late_flagged = snap[snap["flag_late_signal"] == 1].sort_values("temperature", ascending=False)
     wash_flagged = snap[snap["flag_washout"] == 1].sort_values("temperature")
     earnings_soon = snap[snap["flag_earnings_soon"] == 1].sort_values("temperature", ascending=False)
@@ -550,7 +578,18 @@ def main(asof: str | None = None):
     new_wash_df = snap[snap["ticker"].isin(data["new_wash"])].sort_values("temperature")
     watchlist_df = snap[snap["ticker"].isin(wl_tickers)].sort_values("temperature", ascending=False)
 
-    # Pre-build drill-downs for ALL tickers in snap
+    # KPI tile values
+    kpi_total = len(snap)
+    kpi_late = int((snap["flag_late_signal"] == 1).sum())
+    kpi_wash = int((snap["flag_washout"] == 1).sum())
+    kpi_earnings = int((snap["flag_earnings_soon"] == 1).sum())
+    kpi_new_late = len(new_late_df)
+    kpi_new_wash = len(new_wash_df)
+    kpi_avg_temp = snap["temperature"].mean()
+    kpi_pct_hot = (snap["temperature"] >= 70).mean() * 100
+    kpi_pct_cold = (snap["temperature"] <= 30).mean() * 100
+
+    # Pre-build drilldowns for ALL tickers
     sig_long_by_ticker = {t: g for t, g in data["sig_long"].groupby("ticker")}
     est_by_ticker = data["estimates"].set_index("ticker") if not data["estimates"].empty else pd.DataFrame()
     earn_by_ticker = data["earnings"].set_index("ticker") if not data["earnings"].empty else pd.DataFrame()
@@ -572,23 +611,42 @@ def main(asof: str | None = None):
             row, sig_t, est_t, earn_t, actions_t, spark, notes_t, sector_groups, cluster_mates, sector_mates
         ))
 
-    # CSV data (snapshot for export)
+    # All-names data for JS-rendered table
+    all_names_data = []
+    for _, r in snap.iterrows():
+        all_names_data.append({
+            "ticker": r["ticker"],
+            "name": (r.get("name") or "")[:40],
+            "temp": float(r["temperature"]) if pd.notna(r["temperature"]) else None,
+            "chg7d": float(r["temp_7d_chg"]) if pd.notna(r.get("temp_7d_chg")) else None,
+            "pos": float(r["score_positioning"]) if pd.notna(r.get("score_positioning")) else None,
+            "val": float(r["score_valuation"]) if pd.notna(r.get("score_valuation")) else None,
+            "tech": float(r["score_technical"]) if pd.notna(r.get("score_technical")) else None,
+            "conv": float(r["conviction"]) if pd.notna(r.get("conviction")) else None,
+            "anom": int(r["anomaly_count"]) if pd.notna(r.get("anomaly_count")) else None,
+            "late": bool(r.get("flag_late_signal") == 1),
+            "wash": bool(r.get("flag_washout") == 1),
+            "earn": bool(r.get("flag_earnings_soon") == 1),
+            "cluster": r.get("cluster_id") or "",
+            "mcap_b": float(r["market_cap"]) / 1e9 if pd.notna(r.get("market_cap")) else None,
+            "watched": r["ticker"] in wl_tickers,
+        })
+
+    # CSV
     csv_data = snap[["ticker", "name", "temperature", "score_positioning",
                      "score_valuation", "score_technical", "conviction",
                      "anomaly_count", "temp_7d_chg",
                      "flag_late_signal", "flag_washout", "flag_earnings_soon"]].fillna("")
     csv_text = csv_data.to_csv(index=False)
 
-    # Sector group filter options
-    sg_options = "<option value=''>(all)</option>" + "".join(
+    sg_options = "<option value=''>All sectors</option>" + "".join(
         f"<option value='{sg}'>{info['label']}</option>" for sg, info in sector_groups.items()
     )
     cluster_options_set = sorted(set(snap.dropna(subset=["cluster_id"])["cluster_id"]))
-    cluster_options = "<option value=''>(all)</option>" + "".join(
+    cluster_options = "<option value=''>All clusters</option>" + "".join(
         f"<option value='{c}'>{c}</option>" for c in cluster_options_set
     )
 
-    # Sector group → ticker map for JS filter
     sg_ticker_map = {sg: info["tickers"] for sg, info in sector_groups.items()}
 
     # === HTML ===
@@ -597,134 +655,494 @@ def main(asof: str | None = None):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Positioning Meter — {asof}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {{
-  --hot: #c53030;
-  --cold: #2e7d32;
-  --bg: #fafafa;
-  --card-bg: #fff;
-  --border: #e1e1e1;
+  --bg: #f1f5f9;
+  --panel: #ffffff;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-dim: #94a3b8;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --hot-ext: #b91c1c;
+  --hot: #ef4444;
+  --neutral: #64748b;
+  --cold: #10b981;
+  --cold-ext: #047857;
+  --warning: #f59e0b;
+  --shadow-sm: 0 1px 2px rgba(15,23,42,0.04);
+  --shadow: 0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-lg: 0 4px 12px rgba(15,23,42,0.08);
+  --radius: 10px;
 }}
 * {{ box-sizing: border-box; }}
-body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: #222; max-width: 1300px; margin: 0 auto; padding: 1em; }}
-h1 {{ border-bottom: 2px solid #333; padding-bottom: 0.3em; }}
-h2 {{ color: #333; margin-top: 1.5em; }}
-h3 {{ color: #444; margin-top: 1.2em; }}
-h4 {{ margin: 0.5em 0; color: #555; }}
-table {{ border-collapse: collapse; width: 100%; font-size: 13px; background: var(--card-bg); }}
-th, td {{ padding: 6px 8px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }}
-th {{ background: #f5f5f5; font-weight: 600; cursor: help; }}
-tr:hover {{ background: #fcfcfc; }}
-.ticker-link {{ font-weight: 600; font-family: ui-monospace, 'SF Mono', Menlo, monospace; color: #1d4ed8; text-decoration: none; }}
-.ticker-link:hover {{ text-decoration: underline; }}
-.name {{ color: #555; font-size: 12px; }}
-.temp {{ font-weight: 700; text-align: right; font-family: ui-monospace, monospace; }}
-.chg {{ text-align: right; font-family: ui-monospace, monospace; font-size: 12px; }}
-.chg.pos {{ color: var(--hot); }}
-.chg.neg {{ color: var(--cold); }}
-.bk {{ text-align: right; color: #666; font-size: 12px; font-family: ui-monospace, monospace; }}
-.flag {{ text-align: center; font-size: 14px; }}
-.empty {{ color: #999; font-style: italic; }}
-.hint {{ color: #777; font-size: 12px; }}
-.mono {{ font-family: ui-monospace, monospace; font-size: 12px; }}
-.subtitle {{ color: #777; font-size: 13px; }}
-.gloss-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; margin: 1em 0; }}
-.gloss-card {{ background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; font-size: 13px; }}
-.gloss-card h4 {{ color: #333; margin: 0 0 0.3em 0; }}
-.gloss-card p {{ margin: 0.3em 0; line-height: 1.4; }}
-.gloss-card ul {{ margin: 0.3em 0; padding-left: 1.2em; line-height: 1.4; }}
-.gloss-card code {{ background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 11px; }}
-.glossary {{ background: #fffbe6; border: 1px solid #f0d090; padding: 0.6em 0.8em; border-radius: 4px; margin-bottom: 1.5em; }}
-.glossary > summary {{ cursor: pointer; font-weight: 600; }}
-.controls {{ background: var(--card-bg); border: 1px solid var(--border); padding: 10px; border-radius: 6px; margin-bottom: 1em; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }}
-.controls input, .controls select {{ padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }}
-.controls button {{ padding: 6px 12px; background: #1d4ed8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }}
-.controls button:hover {{ background: #1e40af; }}
-section {{ margin-bottom: 1.5em; }}
-section.drilldown {{ background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1em; margin-bottom: 0.8em; }}
-section.drilldown .summary {{ display: flex; justify-content: space-between; gap: 1em; align-items: flex-start; }}
-section.drilldown table.signals th {{ background: #f9f9f9; }}
-section.drilldown .card {{ margin-top: 0.8em; padding: 0.6em 0.8em; background: #fafafa; border: 1px solid var(--border); border-radius: 4px; }}
-section.drilldown .back {{ font-size: 14px; color: #1d4ed8; text-decoration: none; margin-left: 8px; }}
-.big {{ font-size: 24px; font-weight: 700; }}
-.big.hot {{ color: var(--hot); }}
-.big.cold {{ color: var(--cold); }}
-.spark {{ display: block; }}
-.notes {{ background: #fff; border: 1px solid var(--border); padding: 6px 10px; font-family: -apple-system, system-ui, sans-serif; white-space: pre-wrap; font-size: 13px; min-height: 30px; }}
-table.overlay td {{ padding: 4px 8px; }}
-table.overlay td:nth-child(odd) {{ color: #666; font-size: 12px; }}
-.prov {{ background: var(--card-bg); border: 1px solid var(--border); padding: 0.5em 0.8em; border-radius: 4px; margin-top: 1.5em; font-size: 12px; }}
-.backtest {{ background: var(--card-bg); border: 1px solid var(--border); padding: 0.5em 0.8em; border-radius: 4px; margin-top: 1em; }}
-.watched-row {{ background: #fff7ed; }}
-neg {{ color: var(--cold); }}
-pos {{ color: var(--hot); }}
+html, body {{ margin: 0; padding: 0; }}
+body {{
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  font-size: 14px;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}}
+.container {{ max-width: 1400px; margin: 0 auto; padding: 1.5rem; }}
+
+/* Header */
+.app-header {{
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  color: white;
+  padding: 1.5rem 0;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-lg);
+}}
+.app-header .container {{ padding-top: 0; padding-bottom: 0; }}
+.app-header h1 {{ margin: 0 0 0.25rem 0; font-size: 1.75rem; font-weight: 700; }}
+.app-header .subtitle {{ opacity: 0.85; font-size: 0.875rem; }}
+.app-header .subtitle b {{ font-weight: 600; }}
+
+/* KPI tiles */
+.kpis {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}}
+.kpi {{
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.875rem 1rem;
+  box-shadow: var(--shadow-sm);
+}}
+.kpi-label {{ font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.04em; font-weight: 500; }}
+.kpi-value {{ font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem; line-height: 1.2; }}
+.kpi-sub {{ font-size: 0.75rem; color: var(--text-dim); margin-top: 0.1rem; }}
+.kpi.hot .kpi-value {{ color: var(--hot); }}
+.kpi.cold .kpi-value {{ color: var(--cold); }}
+
+/* Tabs */
+.tabs {{
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}}
+.tab {{
+  padding: 0.625rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-family: inherit;
+  font-size: 0.875rem;
+  transition: all 0.15s;
+}}
+.tab:hover {{ color: var(--text); background: rgba(37,99,235,0.04); }}
+.tab.active {{ color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }}
+.tab-content {{ display: none; }}
+.tab-content.active {{ display: block; }}
+
+/* Controls */
+.controls {{
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.875rem 1rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+  align-items: center;
+  box-shadow: var(--shadow-sm);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}}
+.controls input, .controls select {{
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  background: white;
+  color: var(--text);
+}}
+.controls input {{ min-width: 200px; }}
+.controls input:focus, .controls select:focus {{ outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }}
+.controls button {{
+  padding: 0.5rem 1rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
+  transition: background 0.15s;
+}}
+.controls button:hover {{ background: var(--primary-dark); }}
+.controls button.secondary {{ background: white; color: var(--text); border: 1px solid var(--border); }}
+.controls button.secondary:hover {{ background: var(--bg); }}
+#count {{ color: var(--text-muted); font-size: 0.8125rem; margin-left: auto; }}
+
+/* Panels */
+.panel {{
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}}
+.panel h3 {{ margin: 0 0 0.5rem 0; font-size: 1.0625rem; font-weight: 600; color: var(--text); }}
+.panel .hint {{ color: var(--text-muted); font-size: 0.8125rem; margin: 0 0 0.875rem 0; }}
+.panel .empty {{ color: var(--text-dim); font-style: italic; padding: 1rem 0; }}
+
+.panels-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem; }}
+@media (max-width: 980px) {{ .panels-grid {{ grid-template-columns: 1fr; }} }}
+.panels-grid .panel {{ margin-bottom: 0; }}
+
+/* Tables */
+.table-wrap {{ overflow-x: auto; max-width: 100%; }}
+table {{ border-collapse: collapse; width: 100%; font-size: 0.8125rem; }}
+th, td {{ padding: 0.5rem 0.625rem; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }}
+th {{ background: #f8fafc; font-weight: 600; color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; cursor: help; position: sticky; top: 0; }}
+table.sortable th {{ cursor: pointer; user-select: none; }}
+table.sortable th:hover {{ color: var(--primary); }}
+table.sortable th.sorted-asc::after {{ content: " ▲"; color: var(--primary); }}
+table.sortable th.sorted-desc::after {{ content: " ▼"; color: var(--primary); }}
+tr:hover td {{ background: #f8fafc; }}
+.num {{ text-align: right; font-variant-numeric: tabular-nums; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.8125rem; }}
+.mono {{ font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.8125rem; }}
+.name {{ color: var(--text-muted); font-size: 0.8125rem; }}
+.flagcol {{ font-size: 1rem; }}
+
+/* Ticker pill */
+.ticker-pill {{
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(37,99,235,0.08);
+  color: var(--primary);
+  border-radius: 4px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8125rem;
+  text-decoration: none;
+}}
+.ticker-pill:hover {{ background: rgba(37,99,235,0.15); }}
+
+/* Temperature classes */
+.temp.ext-hot, .stat-val.ext-hot {{ color: var(--hot-ext); font-weight: 700; }}
+.temp.hot, .stat-val.hot {{ color: var(--hot); font-weight: 600; }}
+.temp.ext-cold, .stat-val.ext-cold {{ color: var(--cold-ext); font-weight: 700; }}
+.temp.cold, .stat-val.cold {{ color: var(--cold); font-weight: 600; }}
+.temp.neutral, .stat-val.neutral {{ color: var(--text); }}
+
+/* Change indicators */
+.chg-up {{ color: var(--hot); }}
+.chg-down {{ color: var(--cold); }}
+
+/* Conv/anom muted */
+.conv, .anom {{ color: var(--text-muted); }}
+
+/* Glossary */
+.glossary {{
+  background: linear-gradient(to bottom right, #fffbeb, #fef3c7);
+  border: 1px solid #fde68a;
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}}
+.glossary > summary {{ cursor: pointer; font-weight: 600; color: #92400e; }}
+.glossary summary h2 {{ display: inline; margin: 0; font-size: 1.125rem; color: #78350f; }}
+.gloss-grid {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.875rem;
+  margin-top: 1rem;
+}}
+.gloss-card {{
+  background: white;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+}}
+.gloss-card h4 {{ margin: 0 0 0.4rem 0; color: var(--text); font-size: 0.875rem; font-weight: 600; }}
+.gloss-card p, .gloss-card ul {{ margin: 0.3rem 0; line-height: 1.5; color: var(--text-muted); }}
+.gloss-card ul {{ padding-left: 1.1rem; }}
+.gloss-card code {{ background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace; color: var(--text); }}
+
+/* Drill-down */
+.drilldown {{
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 0.875rem;
+  scroll-margin-top: 5rem;
+  box-shadow: var(--shadow-sm);
+}}
+.drilldown:target {{ border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.15), var(--shadow); }}
+.drilldown-header {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 1.5rem; margin-bottom: 1rem; }}
+.drilldown-title h3 {{ margin: 0 0 0.25rem 0; font-size: 1.25rem; font-weight: 700; }}
+.drilldown-title .ticker-name {{ display: block; font-size: 0.875rem; font-weight: 400; color: var(--text-muted); margin-top: 0.2rem; }}
+.drilldown-title .back {{ color: var(--text-dim); text-decoration: none; margin-right: 0.5rem; font-size: 1rem; }}
+.drilldown-title .back:hover {{ color: var(--primary); }}
+.drilldown-temp {{ text-align: right; }}
+.drilldown-temp .temp-big {{ font-size: 2.75rem; font-weight: 700; line-height: 1; font-family: 'JetBrains Mono', monospace; }}
+.drilldown-temp .temp-sub {{ font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }}
+.tag-earnings {{ display: inline-block; background: #fef3c7; color: #92400e; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-top: 0.4rem; }}
+.drilldown-stats {{ display: grid; grid-template-columns: repeat(5, 1fr) auto; gap: 0.625rem; margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--border); align-items: center; }}
+.stat {{ background: #f8fafc; padding: 0.625rem; border-radius: 6px; text-align: center; }}
+.stat-label {{ display: block; font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.03em; font-weight: 500; }}
+.stat-val {{ display: block; font-size: 1.125rem; font-weight: 600; margin-top: 0.2rem; font-family: 'JetBrains Mono', monospace; }}
+.stat-spark {{ background: #f8fafc; border-radius: 6px; padding: 0.5rem; text-align: center; }}
+.spark {{ display: block; margin: 0 auto; }}
+.spark-meta {{ font-size: 0.7rem; color: var(--text-muted); margin-top: 0.2rem; }}
+.drilldown h4 {{ font-size: 0.875rem; font-weight: 600; color: var(--text); margin: 1rem 0 0.5rem 0; }}
+.drilldown table.signals th, .drilldown table.actions th {{ background: #f1f5f9; }}
+.card {{ margin: 0.875rem 0; padding: 0.875rem 1rem; background: #f8fafc; border-radius: 6px; }}
+.overlay-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.625rem; margin-top: 0.5rem; }}
+.overlay-grid > div {{ display: flex; flex-direction: column; gap: 0.15rem; }}
+.overlay-label {{ font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; }}
+.overlay-val {{ font-size: 0.875rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; }}
+.overlay-val.rec-buy {{ color: var(--cold); }}
+.overlay-val.rec-sell {{ color: var(--hot); }}
+.peer-row {{ font-size: 0.8125rem; margin: 0.4rem 0; color: var(--text-muted); }}
+.peer-label {{ color: var(--text); font-weight: 500; }}
+.peer-link {{ color: var(--primary); text-decoration: none; padding: 0 2px; font-family: 'JetBrains Mono', monospace; }}
+.peer-link:hover {{ text-decoration: underline; }}
+.notes {{ background: white; border: 1px solid var(--border); padding: 0.625rem 0.875rem; font-family: inherit; font-size: 0.8125rem; min-height: 30px; margin: 0; white-space: pre-wrap; border-radius: 6px; }}
+
+/* Footer cards */
+.footer-card {{
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.625rem 1rem;
+  margin-top: 1.5rem;
+  font-size: 0.8125rem;
+}}
+.footer-card summary {{ cursor: pointer; font-weight: 500; color: var(--text-muted); }}
+.footer-card summary:hover {{ color: var(--text); }}
+
+/* Responsive */
 @media (max-width: 700px) {{
-  body {{ padding: 0.5em; font-size: 13px; }}
-  table {{ font-size: 11px; }}
-  th, td {{ padding: 3px 4px; }}
+  .container {{ padding: 0.75rem; }}
+  .app-header {{ padding: 1rem 0; }}
+  .app-header h1 {{ font-size: 1.25rem; }}
+  .kpis {{ grid-template-columns: repeat(2, 1fr); }}
+  .drilldown-header {{ flex-direction: column; gap: 0.5rem; }}
+  .drilldown-temp {{ text-align: left; }}
+  .drilldown-stats {{ grid-template-columns: repeat(3, 1fr); }}
+  .drilldown-stats .stat-spark {{ grid-column: span 3; }}
+  table {{ font-size: 0.75rem; }}
+  th, td {{ padding: 0.4rem 0.5rem; }}
 }}
 </style>
 </head>
 <body>
 <a id=top></a>
+
+<header class=app-header>
+<div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>As of <b>{asof}</b> · {len(snap)} names with composite temperature · V1.4 + min-buckets · Backtest IC −0.022 (3m fwd)</div>
+<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · V1.4 + min-buckets · Backtest IC <b>−0.022</b> at 3m fwd · Bot decile hit <b>56%</b></div>
+</div>
+</header>
 
-{GLOSSARY}
+<div class=container>
 
-<div class=controls>
-<input type=text id=search placeholder="Search ticker or name…" oninput=filterAll()>
-<select id=cluster onchange=filterAll()>
-<option value=''>(all clusters)</option>
-{cluster_options}
-</select>
-<select id=sector onchange=filterAll()>
-{sg_options}
-</select>
-<button onclick=exportCSV()>📥 Export CSV</button>
-<button onclick=clearFilters()>↻ Clear</button>
-<span class=hint id=count></span>
+<div class=kpis>
+<div class=kpi><div class=kpi-label>Universe</div><div class=kpi-value>{kpi_total}</div><div class=kpi-sub>names with composite</div></div>
+<div class=kpi><div class=kpi-label>Avg temp</div><div class=kpi-value>{kpi_avg_temp:.1f}</div><div class=kpi-sub>0=cold · 100=hot</div></div>
+<div class="kpi hot"><div class=kpi-label>% hot (≥70)</div><div class=kpi-value>{kpi_pct_hot:.0f}%</div><div class=kpi-sub>{int(kpi_pct_hot/100*kpi_total)} names</div></div>
+<div class="kpi cold"><div class=kpi-label>% cold (≤30)</div><div class=kpi-value>{kpi_pct_cold:.0f}%</div><div class=kpi-sub>{int(kpi_pct_cold/100*kpi_total)} names</div></div>
+<div class="kpi hot"><div class=kpi-label>🔥 Late flag</div><div class=kpi-value>{kpi_late}</div><div class=kpi-sub>{kpi_new_late} new this week</div></div>
+<div class="kpi cold"><div class=kpi-label>❄️ Washout flag</div><div class=kpi-value>{kpi_wash}</div><div class=kpi-sub>{kpi_new_wash} new this week</div></div>
+<div class=kpi><div class=kpi-label>📅 Earnings ≤14d</div><div class=kpi-value>{kpi_earnings}</div><div class=kpi-sub>names reporting soon</div></div>
 </div>
 
-<h2>📊 Summary panels</h2>
+{render_glossary()}
 
-{render_table(hottest, "🔥 Hottest 25 (highest temperature)", "Largest extreme-positioning + extreme-momentum + extreme-valuation triple-stretches.")}
-{render_table(coldest, "❄️ Coldest 25 (lowest temperature)", "Most washed-out names — historically associated with positive forward returns at extremes.")}
-{render_table(movers_up, "📈 Heating up (top 15 by 7d temp Δ)", "Names whose temperature rose the most in the last 5 trading days.")}
-{render_table(movers_down, "📉 Cooling off (top 15 by 7d temp Δ)", "Names whose temperature dropped the most in the last 5 trading days.")}
-{render_table(late_flagged, f"🔥 Compound LATE flag ({len(late_flagged)} names)", "Pos ≥ 85, Val ≥ 80, Tech ≥ 85 — triple-extreme stretched.", empty_msg="No names triggered today.")}
-{render_table(wash_flagged, f"❄️ Compound WASHOUT flag ({len(wash_flagged)} names)", "Pos ≤ 15, Val ≤ 25, Tech ≤ 15 — triple-extreme washed-out.", empty_msg="No names triggered today.")}
-{render_table(new_late_df, f"🆕 NEW Late flags (last 7d, {len(new_late_df)} names)", "Names that newly entered the LATE flag in the past 7 days.", empty_msg="(none)")}
-{render_table(new_wash_df, f"🆕 NEW Washout flags (last 7d, {len(new_wash_df)} names)", "Names that newly entered the WASHOUT flag in the past 7 days.", empty_msg="(none)")}
-{render_table(earnings_soon, f"📅 Earnings within 14d ({len(earnings_soon)} names)", "Names reporting earnings in the next 2 weeks. Implied move + positioning often diverge here.", empty_msg="(none)")}
-{render_table(watchlist_df, f"👁️ Watchlist ({len(watchlist_df)} names)", "Tickers you've added to the watchlist (via the watchlist DB table).", empty_msg="(empty — add via SQL: INSERT INTO watchlist (ticker, label) VALUES ('NVDA', 'core'))")}
+<div class=controls>
+<input type=text id=search placeholder="🔍 Search ticker or name…" oninput=filterAll()>
+<select id=cluster onchange=filterAll()>{cluster_options}</select>
+<select id=sector onchange=filterAll()>{sg_options}</select>
+<button onclick=exportCSV()>📥 Export CSV</button>
+<button onclick=clearFilters() class=secondary>Clear</button>
+<span id=count></span>
+</div>
 
+<div class=tabs>
+<button class="tab active" data-tab=overview onclick=showTab('overview')>📊 Overview</button>
+<button class=tab data-tab=allnames onclick=showTab('allnames')>📋 All Names ({kpi_total})</button>
+<button class=tab data-tab=movers onclick=showTab('movers')>📈 Movers</button>
+<button class=tab data-tab=flags onclick=showTab('flags')>🚩 Flags</button>
+<button class=tab data-tab=watchlist onclick=showTab('watchlist')>👁️ Watchlist ({len(watchlist_df)})</button>
+<button class=tab data-tab=backtest onclick=showTab('backtest')>📈 Backtest</button>
+<button class=tab data-tab=detail onclick=showTab('detail')>🔍 Detail (per-ticker)</button>
+</div>
+
+<div class="tab-content active" id=tab-overview>
+<div class=panels-grid>
+{render_summary_table(hottest, "🔥 Hottest 25", "Highest composite temperature — most extreme positioning + momentum + valuation.")}
+{render_summary_table(coldest, "❄️ Coldest 25", "Lowest composite temperature — most washed out names.")}
+</div>
+</div>
+
+<div class="tab-content" id=tab-allnames>
+<div class=panel>
+<h3>📋 All names ({kpi_total})</h3>
+<p class=hint>Sortable by clicking any column header. Use the search/filter at top to narrow down. Click any ticker to jump to its detail card.</p>
+<div class=table-wrap>
+<table id=allNamesTable class="rank sortable">
+<thead><tr>
+<th data-sort=ticker>Ticker</th>
+<th data-sort=name>Name</th>
+<th class=num data-sort=temp>Temp</th>
+<th class=num data-sort=chg7d>7d Δ</th>
+<th class=num data-sort=pos>Pos</th>
+<th class=num data-sort=val>Val</th>
+<th class=num data-sort=tech>Tech</th>
+<th class=num data-sort=conv>Conv</th>
+<th class=num data-sort=anom>Anom</th>
+<th class=num data-sort=mcap_b title="Market cap ($B)">$B</th>
+<th>Flags</th>
+</tr></thead>
+<tbody></tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div class="tab-content" id=tab-movers>
+<div class=panels-grid>
+{render_summary_table(movers_up, "📈 Heating up (top 20 by 7d temp Δ)", "Names whose temperature rose most.")}
+{render_summary_table(movers_down, "📉 Cooling off (top 20 by 7d temp Δ)", "Names whose temperature dropped most.")}
+</div>
+</div>
+
+<div class="tab-content" id=tab-flags>
+{render_summary_table(late_flagged, f"🔥 Compound LATE flag ({len(late_flagged)} names)", "Pos ≥ 85, Val ≥ 80, Tech ≥ 85.", "No names triggered today.")}
+{render_summary_table(wash_flagged, f"❄️ Compound WASHOUT flag ({len(wash_flagged)} names)", "Pos ≤ 15, Val ≤ 25, Tech ≤ 15.", "No names triggered today.")}
+{render_summary_table(new_late_df, f"🆕 NEW Late flags (last 7d, {len(new_late_df)})", "Newly entered LATE in past 7 days.", "(none)")}
+{render_summary_table(new_wash_df, f"🆕 NEW Washout flags (last 7d, {len(new_wash_df)})", "Newly entered WASHOUT in past 7 days.", "(none)")}
+{render_summary_table(earnings_soon, f"📅 Earnings within 14d ({len(earnings_soon)})", "Reporting in next 2 weeks.", "(none)")}
+</div>
+
+<div class="tab-content" id=tab-watchlist>
+{render_summary_table(watchlist_df, f"👁️ Watchlist ({len(watchlist_df)})", "Tickers in your watchlist table.", "(empty — add via SQL: INSERT INTO watchlist (ticker, label, added_at) VALUES ('NVDA', 'core', date('now')))")}
+</div>
+
+<div class="tab-content" id=tab-backtest>
 {render_backtest_card(data["backtest_results"])}
+</div>
 
-<h2>🔍 Per-ticker drill-down</h2>
-<p class=hint>Click any ticker in the tables above to jump to its detail card. {len(drilldowns)} cards below.</p>
+<div class="tab-content" id=tab-detail>
+<div class=panel>
+<h3>🔍 Per-ticker drill-down ({len(drilldowns)} cards)</h3>
+<p class=hint>Click any ticker in any table to jump here. Use the search filter above to narrow this view.</p>
+</div>
 {''.join(drilldowns)}
+</div>
 
 {render_provenance(data["provenance"])}
 
-<details>
-<summary class=hint><b>Methodology (click to expand)</b></summary>
-<div class=hint style="max-width:800px;line-height:1.5;font-size:12px;">
-<p><b>Universe</b>: 366 TMT names (mcap ≥ $1.5B) from theme_detector.</p>
-<p><b>Signals</b>: 18 total computed daily — 13 in composite, 5 overlay-only. See QUESTIONS.md for backtest-driven inclusion decisions (e.g. trend signals like 12m return excluded because positive IC means they're not contrarian).</p>
-<p><b>Dual percentile</b>: each signal is scored vs (a) own 5y rolling history and (b) cluster peers cross-section. Bucket scores average those.</p>
-<p><b>Composite</b>: weighted average of bucket scores. Initial weights pos 0.25 / val 0.20 / tech 0.20 (flows + options not yet implemented). Reweighted when buckets are missing for a name. Min 2 buckets required.</p>
-<p><b>Backtest</b>: 10y daily panel, IC = Spearman correlation between signal percentile and forward return. V1.4 composite IC −0.022 at 3m fwd, decile spread −2.30%, bot decile hit 56%. See data/backtest_report.md.</p>
-<p><b>Limitations</b>: options bucket not implemented (would require Polygon $200/mo). ETF flows forward-only. EPS revision overlay shows current snapshot only. 13F has 45-day reporting lag and is long-only. NASDAQ true SI covers only NASDAQ-listed names (~65% of universe).</p>
+<details class=footer-card>
+<summary><b>Methodology</b></summary>
+<div style="max-width:850px;line-height:1.6;color:var(--text-muted);font-size:0.8125rem;padding-top:0.5rem;">
+<p><b>Universe</b>: 366 TMT names (mcap ≥ $1.5B) drawn from theme_detector.</p>
+<p><b>Signals</b>: 18 daily signals — 13 in composite, 5 overlay-only. Inclusion driven by backtest IC sign (positive IC = trend, excluded from contrarian composite).</p>
+<p><b>Dual percentile</b>: each signal ranked vs (a) own 5y trailing history and (b) cluster peers cross-section. Bucket scores average those.</p>
+<p><b>Composite</b>: weighted average of bucket scores. Reweighted when buckets are missing. Min 2 buckets required for a temperature reading.</p>
+<p><b>Backtest</b>: 10y daily panel. IC = Spearman correlation between signal percentile and forward return. V1.4 composite IC −0.022 at 3m fwd, decile spread −2.30%, bot decile hit 56%. See data/backtest_report.md.</p>
+<p><b>Limitations</b>: options bucket not implemented (Polygon $200/mo would unlock). ETF flows forward-only. EPS revisions live snapshot only. NASDAQ true SI covers only NASDAQ-listed names (~65% of universe). 13F has 45-day reporting lag and is long-only.</p>
 </div>
 </details>
+
+</div>
 
 <script>
 const CSV = {json.dumps(csv_text)};
 const SECTOR_TICKERS = {json.dumps(sg_ticker_map)};
-const CLUSTER_OF = {json.dumps(dict(zip(snap["ticker"], snap["cluster_id"].fillna(""))))};
+const ALL_NAMES = {json.dumps(all_names_data)};
 const TOTAL_NAMES = {len(snap)};
 
+// === Tabs ===
+function showTab(id) {{
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === id));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + id));
+  if (id === 'allnames' && !window.__allNamesRendered) {{
+    renderAllNames();
+    window.__allNamesRendered = true;
+  }}
+}}
+
+// === All-names table render ===
+let allNamesSortKey = 'temp';
+let allNamesSortDir = 'desc';
+function renderAllNames() {{
+  const tbody = document.querySelector('#allNamesTable tbody');
+  const data = [...ALL_NAMES].sort((a, b) => {{
+    let av = a[allNamesSortKey], bv = b[allNamesSortKey];
+    if (av == null) av = allNamesSortDir === 'desc' ? -Infinity : Infinity;
+    if (bv == null) bv = allNamesSortDir === 'desc' ? -Infinity : Infinity;
+    if (typeof av === 'string') return allNamesSortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return allNamesSortDir === 'asc' ? av - bv : bv - av;
+  }});
+  const fmt = (v, p) => v == null ? '—' : v.toFixed(p);
+  const tempCls = v => v == null ? '' : v >= 85 ? 'ext-hot' : v >= 70 ? 'hot' : v <= 15 ? 'ext-cold' : v <= 30 ? 'cold' : 'neutral';
+  tbody.innerHTML = data.map(r => `
+    <tr data-ticker="${{r.ticker}}">
+      <td><a href="#t-${{r.ticker}}" class=ticker-pill onclick="showTab('detail')">${{r.ticker}}</a></td>
+      <td class=name>${{r.name}}</td>
+      <td class="num temp ${{tempCls(r.temp)}}">${{fmt(r.temp, 1)}}</td>
+      <td class="num ${{r.chg7d > 0 ? 'chg-up' : r.chg7d < 0 ? 'chg-down' : ''}}">${{r.chg7d == null ? '—' : (r.chg7d >= 0 ? '+' : '') + r.chg7d.toFixed(1)}}</td>
+      <td class=num>${{fmt(r.pos, 1)}}</td>
+      <td class=num>${{fmt(r.val, 1)}}</td>
+      <td class=num>${{fmt(r.tech, 1)}}</td>
+      <td class="num conv">${{fmt(r.conv, 1)}}</td>
+      <td class="num anom">${{r.anom == null ? '—' : r.anom}}</td>
+      <td class=num>${{r.mcap_b == null ? '—' : '$' + r.mcap_b.toFixed(1)}}</td>
+      <td class=flagcol>${{r.late ? '🔥' : ''}}${{r.wash ? '❄️' : ''}}${{r.earn ? '📅' : ''}}</td>
+    </tr>
+  `).join('');
+  // Update sort indicators
+  document.querySelectorAll('#allNamesTable th').forEach(th => {{
+    th.classList.remove('sorted-asc', 'sorted-desc');
+    if (th.dataset.sort === allNamesSortKey) th.classList.add(allNamesSortDir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+  }});
+  filterAll();
+}}
+
+// === Sort headers ===
+document.addEventListener('DOMContentLoaded', () => {{
+  document.querySelectorAll('#allNamesTable th[data-sort]').forEach(th => {{
+    th.addEventListener('click', () => {{
+      const key = th.dataset.sort;
+      if (allNamesSortKey === key) {{
+        allNamesSortDir = allNamesSortDir === 'asc' ? 'desc' : 'asc';
+      }} else {{
+        allNamesSortKey = key;
+        allNamesSortDir = ['ticker','name','cluster'].includes(key) ? 'asc' : 'desc';
+      }}
+      renderAllNames();
+    }});
+  }});
+}});
+
+// === Search/filter (works across all tables AND drilldowns AND all-names) ===
 function filterAll() {{
   const q = document.getElementById('search').value.toLowerCase();
   const cluster = document.getElementById('cluster').value;
@@ -732,26 +1150,36 @@ function filterAll() {{
   const sectorTickers = sector ? new Set(SECTOR_TICKERS[sector] || []) : null;
   let visible = 0;
 
+  const matchTicker = (ticker, name) => {{
+    if (q && !ticker.toLowerCase().includes(q) && !(name||'').toLowerCase().includes(q)) return false;
+    if (cluster) {{
+      const r = ALL_NAMES.find(x => x.ticker === ticker);
+      if (!r || r.cluster !== cluster) return false;
+    }}
+    if (sectorTickers && !sectorTickers.has(ticker)) return false;
+    return true;
+  }};
+
   document.querySelectorAll('table.rank tbody tr').forEach(tr => {{
     const ticker = tr.dataset.ticker || '';
-    const name = (tr.querySelector('.name')?.textContent || '').toLowerCase();
-    const tickerLower = ticker.toLowerCase();
-    let match = !q || tickerLower.includes(q) || name.includes(q);
-    if (cluster && CLUSTER_OF[ticker] !== cluster) match = false;
-    if (sectorTickers && !sectorTickers.has(ticker)) match = false;
-    tr.style.display = match ? '' : 'none';
-    if (match) visible++;
+    const name = (tr.querySelector('.name')?.textContent || '');
+    const ok = matchTicker(ticker, name);
+    tr.style.display = ok ? '' : 'none';
+    if (ok) visible++;
   }});
 
   document.querySelectorAll('section.drilldown').forEach(sec => {{
-    const ticker = sec.id.replace('t-', '');
-    let match = !q || ticker.toLowerCase().includes(q) || (sec.querySelector('h3')?.textContent || '').toLowerCase().includes(q);
-    if (cluster && CLUSTER_OF[ticker] !== cluster) match = false;
-    if (sectorTickers && !sectorTickers.has(ticker)) match = false;
-    sec.style.display = match ? '' : 'none';
+    const ticker = sec.dataset.ticker || '';
+    const name = sec.querySelector('h3')?.textContent || '';
+    sec.style.display = matchTicker(ticker, name) ? '' : 'none';
   }});
 
-  document.getElementById('count').textContent = q || cluster || sector ? `${{visible}} / ${{TOTAL_NAMES}} names match` : '';
+  const cnt = document.getElementById('count');
+  if (q || cluster || sector) {{
+    cnt.textContent = `${{visible}} matching rows`;
+  }} else {{
+    cnt.textContent = '';
+  }}
 }}
 
 function clearFilters() {{
@@ -769,6 +1197,20 @@ function exportCSV() {{
   a.download = `positioning_meter_${{new Date().toISOString().slice(0,10)}}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}}
+
+// Auto-show 'detail' tab when navigating to a #t-XXX anchor
+window.addEventListener('hashchange', () => {{
+  if (window.location.hash.startsWith('#t-')) {{
+    showTab('detail');
+    setTimeout(() => {{
+      const el = document.querySelector(window.location.hash);
+      if (el) el.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+    }}, 50);
+  }}
+}});
+if (window.location.hash.startsWith('#t-')) {{
+  showTab('detail');
 }}
 </script>
 </body></html>

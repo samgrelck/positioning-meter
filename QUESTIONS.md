@@ -7,12 +7,19 @@ Append-only — when resolved, mark with ✅ and a brief note rather than deleti
 
 ## Decisions still to make
 
-### EDGAR 13F deferred from V1 — confirm OK
-- **Why deferred:** ~20k filings (top 200-500 HF CIKs × 40 quarters × 10y), bespoke XML parsing, multi-day ingestion. Single biggest piece of code in the project.
-- **Impact on positioning bucket:** drops from 5 signals (HF crowding, HF concentration, SI%float, days-to-cover, insider) to **2 signals (short volume proxy + insider activity)** for V1.
-- **Backtest impact:** positioning bucket's IC/decile-spread will be weaker than it could be. Composite still produces output, but the "crowding" interpretation is more limited.
-- **Remediation path:** Phase 6 — add 13F provider in dedicated session. Or pay $200-400/yr for whalewisdom/insidertrades CSV exports of pre-aggregated 13F data.
-- **TODO:** confirm V1 ships without 13F, or pause and build it now (~1 full session).
+### ~~EDGAR 13F deferred~~  ✅ RESOLVED — implemented V1.2
+- 40-fund curated list, 1,475 filings, 174k holdings rows. CUSIP→ticker mapping at 97% coverage.
+- Backtest revealed HF count signals are TREND, not contrarian — they were moved to overlay (V1.3).
+- Only `hf_top_concentration` was kept in composite briefly; later moved to overlay too (V1.4).
+
+### ~~Valuation in composite~~  ✅ RESOLVED — V1.5 removed
+- **Decision:** valuation moved to overlay. Tool is sentiment / positioning / expectations only.
+- **Rationale:**
+  1. Empirically weakest bucket — ttm_pe IC near zero or wrong sign in V1.4 backtest.
+  2. Conceptually fundamental, not behavioral. Analyst does this work separately.
+  3. TMT specifically punishes valuation mean-reversion (winner-take-all keeps premium multiples).
+- **V1.5 backtest:** composite IC −0.020 at 3m (V1.4 was −0.022). Statistically equivalent — confirms valuation was contributing noise.
+- **Still computed and shown:** ttm_pe and ev_sales are visible on per-ticker drill-down as overlay context.
 
 ## Things to investigate / verify
 

@@ -1,8 +1,8 @@
 # Positioning Meter
 
-A daily-run sentiment/positioning analysis tool for individual TMT stocks.
+A daily-run **sentiment / positioning** analysis tool for individual TMT stocks.
 
-Measures how **crowded, hot, and stretched** each name is across positioning, valuation, and technical buckets — to help judge how early or late we are in a move.
+Measures how **crowded, hot, and stretched** each name is via the positioning bucket (insider, short interest) and technical/price-sentiment bucket (momentum, RSI, distance from MAs). Valuation is shown as overlay context but excluded from the composite — fundamental analysis is done separately.
 
 ## What it shows
 
@@ -23,12 +23,14 @@ Measures how **crowded, hot, and stretched** each name is across positioning, va
 
 366 TMT names, market cap ≥ $1.5B, drawn from sister `theme_detector` project. Theme_detector clusters serve as peer groups for cross-sectional percentile ranking.
 
-## Backtest results (V1.4)
+## Backtest results (V1.5)
 
-- **Composite IC −0.022** at 3-month forward (Spearman)
-- **Decile spread −2.30%** (top minus bottom decile mean fwd return)
+- **Composite IC −0.020** at 3-month forward (Spearman)
+- **Decile spread −2.09%** (top minus bottom decile mean fwd return)
 - **Bottom decile hit rate 56%** (positive forward return when temperature is low)
 - Strongest individual signal: `si_true_dtc` (NASDAQ days-to-cover) IC −0.064 at 3m
+
+V1.5 dropped valuation from composite (still computed as overlay) — composite quality maintained while scope sharpened to sentiment/positioning only.
 
 See `data/backtest_report.md` for full per-signal metrics.
 

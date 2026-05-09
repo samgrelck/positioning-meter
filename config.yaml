@@ -39,12 +39,16 @@ signals:
     min_avg_contract_volume: 1000
 
 composite:
+  # V1.5: valuation removed from composite (overlay-only). Tool is sentiment /
+  # positioning / expectations focused; valuation is fundamental, assessed
+  # separately by analyst. Buckets: positioning + technical now; options +
+  # flows when implemented.
   bucket_weights:
-    positioning: 0.25
-    options: 0.25
-    flows: 0.10
-    valuation: 0.20
-    technical: 0.20
+    positioning: 0.50
+    technical: 0.50
+    options: 0.00   # placeholder for Phase 5
+    flows: 0.00     # placeholder
+    valuation: 0.00  # excluded — was 0.20 in V1.4
   dual_percentile_weights:
     pct_self: 0.5
     pct_peer: 0.5

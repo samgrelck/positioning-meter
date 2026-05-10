@@ -73,7 +73,7 @@ The composite now reads PURELY sentiment + positioning. Names that look "hot" in
 
 - **Trend signals (positive IC):** ret_12m, rs_vs_qqq_3m, rs_vs_xlk_3m, insider_net_90d_abs, hf_count_13f, hf_count_change_4q
 - **Weak signals (~0 IC):** hf_top_concentration
-- **Valuation (V1.5 — fundamental, not sentiment):** ttm_pe, ev_sales
+- **Valuation (V1.5 — fundamental, not sentiment):** **NTM P/E** (computed at render time from `estimates_daily.forward_eps` × latest price). TTM multiples explicitly excluded per design choice. NTM EV/Sales not computed — Yahoo doesn't expose forward revenue consensus.
 
 **Live overlays (no backtest, current snapshot only):**
 - Forward EPS (consensus)

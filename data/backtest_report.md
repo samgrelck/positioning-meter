@@ -1,6 +1,6 @@
 # Positioning Meter — Backtest Report
 
-Generated: 2026-05-09 19:05:46.640678
+Generated: 2026-05-10 15:11:34.577445
 
 Universe: 366 TMT names (mcap >= $1.5B)
 
@@ -28,12 +28,6 @@ Forward horizons: ['1w', '1m', '3m']
 | ret_6m | pct_peer | 1w | 616,780 | 0.0080 | — | 45.87% | 52.21% |
 | ret_6m | pct_peer | 1m | 611,278 | 0.0111 | — | 44.30% | 53.86% |
 | ret_6m | pct_peer | 3m | 596,984 | 0.0193 | — | 42.49% | 55.82% |
-| ret_12m | pct_self | 1w | 534,079 | 0.0049 | 0.0021 | 45.94% | 53.60% |
-| ret_12m | pct_self | 1m | 528,542 | 0.0104 | 0.0116 | 44.64% | 54.13% |
-| ret_12m | pct_self | 3m | 514,246 | 0.0038 | 0.0121 | 44.95% | 55.94% |
-| ret_12m | pct_peer | 1w | 574,857 | 0.0077 | — | 46.28% | 51.90% |
-| ret_12m | pct_peer | 1m | 569,488 | 0.0106 | — | 45.26% | 53.17% |
-| ret_12m | pct_peer | 3m | 555,610 | 0.0154 | — | 44.46% | 55.21% |
 | dist_200ma | pct_self | 1w | 549,818 | -0.0128 | -0.0020 | 47.46% | 54.81% |
 | dist_200ma | pct_self | 1m | 544,260 | -0.0088 | -0.0028 | 45.04% | 56.85% |
 | dist_200ma | pct_self | 3m | 529,833 | -0.0000 | -0.0003 | 43.58% | 57.32% |
@@ -52,6 +46,12 @@ Forward horizons: ['1w', '1m', '3m']
 | pct_from_52w_high | pct_peer | 1w | 654,545 | 0.0050 | — | 45.38% | 52.01% |
 | pct_from_52w_high | pct_peer | 1m | 648,845 | 0.0112 | — | 43.03% | 53.94% |
 | pct_from_52w_high | pct_peer | 3m | 634,173 | 0.0165 | — | 40.95% | 55.48% |
+| ret_12m | pct_self | 1w | 534,079 | 0.0049 | 0.0021 | 45.94% | 53.60% |
+| ret_12m | pct_self | 1m | 528,542 | 0.0104 | 0.0116 | 44.64% | 54.13% |
+| ret_12m | pct_self | 3m | 514,246 | 0.0038 | 0.0121 | 44.95% | 55.94% |
+| ret_12m | pct_peer | 1w | 574,857 | 0.0077 | — | 46.28% | 51.90% |
+| ret_12m | pct_peer | 1m | 569,488 | 0.0106 | — | 45.26% | 53.17% |
+| ret_12m | pct_peer | 3m | 555,610 | 0.0154 | — | 44.46% | 55.21% |
 | rs_vs_qqq_3m | pct_self | 1w | 599,906 | 0.0050 | 0.0004 | 45.94% | 53.28% |
 | rs_vs_qqq_3m | pct_self | 1m | 594,201 | 0.0157 | 0.0095 | 43.58% | 54.28% |
 | rs_vs_qqq_3m | pct_self | 3m | 579,373 | 0.0111 | 0.0147 | 43.14% | 54.38% |
@@ -64,36 +64,27 @@ Forward horizons: ['1w', '1m', '3m']
 | rs_vs_xlk_3m | pct_peer | 1w | 638,439 | 0.0054 | — | 46.10% | 52.23% |
 | rs_vs_xlk_3m | pct_peer | 1m | 632,847 | 0.0112 | — | 44.54% | 53.36% |
 | rs_vs_xlk_3m | pct_peer | 3m | 618,283 | 0.0168 | — | 42.43% | 55.45% |
-| ttm_pe | pct_self | 1w | 315,460 | -0.0011 | -0.0018 | 45.95% | 53.78% |
-| ttm_pe | pct_self | 1m | 312,782 | 0.0030 | -0.0034 | 44.04% | 55.23% |
-| ttm_pe | pct_self | 3m | 305,839 | 0.0151 | 0.0075 | 41.28% | 57.08% |
-| ttm_pe | pct_peer | 1w | 332,789 | -0.0004 | — | 46.05% | 53.64% |
-| ttm_pe | pct_peer | 1m | 330,016 | -0.0025 | — | 44.29% | 56.36% |
-| ttm_pe | pct_peer | 3m | 322,748 | -0.0123 | — | 42.52% | 59.69% |
-| ev_sales | pct_self | 1w | 435,245 | -0.0015 | -0.0023 | 46.56% | 53.31% |
-| ev_sales | pct_self | 1m | 430,975 | -0.0022 | -0.0077 | 45.93% | 55.18% |
-| ev_sales | pct_self | 3m | 419,803 | 0.0020 | -0.0119 | 43.27% | 57.40% |
-| ev_sales | pct_peer | 1w | 450,465 | 0.0002 | — | 46.10% | 52.89% |
-| ev_sales | pct_peer | 1m | 446,419 | -0.0022 | — | 44.58% | 54.97% |
-| ev_sales | pct_peer | 3m | 435,894 | -0.0062 | — | 42.74% | 58.27% |
 | insider_net_90d_signed | pct_self | 1w | 240,192 | -0.0047 | — | 45.31% | 55.42% |
 | insider_net_90d_signed | pct_self | 1m | 238,110 | -0.0036 | — | 42.60% | 58.80% |
 | insider_net_90d_signed | pct_self | 3m | 232,708 | 0.0078 | — | 38.65% | 62.13% |
 | insider_net_90d_signed | pct_peer | 1w | 179,264 | -0.0116 | — | 45.49% | 56.42% |
 | insider_net_90d_signed | pct_peer | 1m | 177,906 | -0.0192 | — | 44.14% | 59.55% |
 | insider_net_90d_signed | pct_peer | 3m | 174,373 | -0.0215 | — | 40.27% | 63.81% |
-| insider_net_90d_abs | pct_self | 1w | 240,192 | 0.0084 | 0.0036 | 45.05% | 55.14% |
-| insider_net_90d_abs | pct_self | 1m | 238,110 | 0.0156 | 0.0190 | 40.49% | 57.30% |
-| insider_net_90d_abs | pct_self | 3m | 232,708 | 0.0123 | 0.0557 | 36.30% | 61.82% |
-| insider_net_90d_abs | pct_peer | 1w | 179,264 | 0.0081 | — | 43.70% | 54.77% |
-| insider_net_90d_abs | pct_peer | 1m | 177,906 | 0.0100 | — | 40.58% | 57.57% |
-| insider_net_90d_abs | pct_peer | 3m | 174,373 | 0.0080 | — | 36.20% | 62.17% |
 | short_volume_ratio_14d | pct_self | 1w | 495,462 | -0.0050 | -0.0023 | 46.56% | 52.97% |
 | short_volume_ratio_14d | pct_self | 1m | 489,807 | -0.0139 | -0.0089 | 45.29% | 55.55% |
 | short_volume_ratio_14d | pct_self | 3m | 475,106 | -0.0248 | -0.0271 | 44.14% | 55.68% |
 | short_volume_ratio_14d | pct_peer | 1w | 541,373 | -0.0092 | — | 47.86% | 52.83% |
 | short_volume_ratio_14d | pct_peer | 1m | 535,864 | -0.0192 | — | 47.02% | 55.28% |
 | short_volume_ratio_14d | pct_peer | 3m | 521,581 | -0.0255 | — | 45.92% | 56.43% |
+| si_true_dtc | pct_peer | 1w | 45,799 | -0.0183 | — | 47.35% | 53.35% |
+| si_true_dtc | pct_peer | 1m | 42,719 | -0.0349 | — | 44.62% | 57.96% |
+| si_true_dtc | pct_peer | 3m | 34,629 | -0.0642 | — | 45.54% | 56.29% |
+| insider_net_90d_abs | pct_self | 1w | 240,192 | 0.0084 | 0.0036 | 45.05% | 55.14% |
+| insider_net_90d_abs | pct_self | 1m | 238,110 | 0.0156 | 0.0190 | 40.49% | 57.30% |
+| insider_net_90d_abs | pct_self | 3m | 232,708 | 0.0123 | 0.0557 | 36.30% | 61.82% |
+| insider_net_90d_abs | pct_peer | 1w | 179,264 | 0.0081 | — | 43.70% | 54.77% |
+| insider_net_90d_abs | pct_peer | 1m | 177,906 | 0.0100 | — | 40.58% | 57.57% |
+| insider_net_90d_abs | pct_peer | 3m | 174,373 | 0.0080 | — | 36.20% | 62.17% |
 | hf_count_13f | pct_self | 1w | 545,759 | 0.0126 | — | 45.98% | 52.97% |
 | hf_count_13f | pct_self | 1m | 540,494 | 0.0229 | — | 44.14% | 54.48% |
 | hf_count_13f | pct_self | 3m | 526,783 | 0.0233 | — | 42.42% | 56.17% |
@@ -112,9 +103,6 @@ Forward horizons: ['1w', '1m', '3m']
 | hf_count_change_4q | pct_peer | 1w | 476,310 | 0.0013 | — | 46.67% | 53.06% |
 | hf_count_change_4q | pct_peer | 1m | 471,466 | 0.0012 | — | 45.20% | 54.73% |
 | hf_count_change_4q | pct_peer | 3m | 458,841 | 0.0014 | — | 43.41% | 56.76% |
-| si_true_dtc | pct_peer | 1w | 45,799 | -0.0183 | — | 47.35% | 53.35% |
-| si_true_dtc | pct_peer | 1m | 42,719 | -0.0349 | — | 44.62% | 57.96% |
-| si_true_dtc | pct_peer | 3m | 34,629 | -0.0642 | — | 45.54% | 56.29% |
 
 ## Composite (temperature) results
 

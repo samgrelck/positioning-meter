@@ -12,6 +12,13 @@ Append-only — when resolved, mark with ✅ and a brief note rather than deleti
 - Backtest revealed HF count signals are TREND, not contrarian — they were moved to overlay (V1.3).
 - Only `hf_top_concentration` was kept in composite briefly; later moved to overlay too (V1.4).
 
+### NTM P/E only — never TTM (V1.5 follow-up)
+- User direction: never use TTM multiples. Switched valuation overlay to NTM P/E (price ÷ forward consensus EPS from yfinance).
+- `ttm_pe` and `ev_sales` no longer computed (removed from `OVERLAY_SIGNALS`).
+- NTM EV/Sales not computed — Yahoo doesn't expose reliable forward revenue consensus. Skipped rather than fake.
+- NTM P/E shown on per-ticker drill-down's live overlay card.
+- **TODO if needed:** add NTM EV/Sales when a forward revenue source becomes available (FactSet manual export, or paid feed).
+
 ### ~~Valuation in composite~~  ✅ RESOLVED — V1.5 removed
 - **Decision:** valuation moved to overlay. Tool is sentiment / positioning / expectations only.
 - **Rationale:**

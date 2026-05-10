@@ -46,6 +46,10 @@ SIGNAL_TO_BUCKET = {
 # V1.3: hf_count_13f and hf_count_change_4q showed positive IC in V1.2
 # backtest (trend-following, not contrarian). Moved here.
 # V1.5: valuation moved here — fundamental, not behavioral.
+# V1.5: ttm_pe and ev_sales removed entirely per user direction (never use TTM
+# for valuation multiples). NTM P/E is shown on the dashboard's live-overlay
+# card, computed at render time from estimates_daily.forward_eps × current price.
+# NTM EV/Sales not computed — Yahoo doesn't provide forward revenue consensus.
 OVERLAY_SIGNALS = {
     "ret_12m": "technical_trend_overlay",
     "rs_vs_qqq_3m": "technical_trend_overlay",
@@ -54,8 +58,6 @@ OVERLAY_SIGNALS = {
     "hf_count_13f": "positioning_trend_overlay",
     "hf_count_change_4q": "positioning_trend_overlay",
     "hf_top_concentration": "positioning_overlay",
-    "ttm_pe": "valuation_overlay",
-    "ev_sales": "valuation_overlay",
 }
 
 # All signals to compute and persist (composite + overlay):
@@ -98,8 +100,9 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
     write_status({"phase": "compute_signals"})
     print("Computing technical signals...")
     tech_signals = technical.compute_all(closes)
-    print("Computing valuation signals...")
-    val_signals = valuation.compute_all(closes, fundamentals)
+    # V1.5: valuation signals (ttm_pe, ev_sales) no longer computed.
+    # NTM P/E is rendered at dashboard time from estimates_daily.forward_eps.
+    val_signals = {}
     print("Computing positioning signals...")
     # Build hf_count_change_4q on the fly from the count panel
     hf_change_4q = positioning.hf_change_signal(hf_panels.get("hf_count_13f", pd.DataFrame()), periods=4)

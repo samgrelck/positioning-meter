@@ -148,6 +148,20 @@ def load_data():
         "SELECT * FROM estimates_daily WHERE date = (SELECT MAX(date) FROM estimates_daily)",
         conn,
     )
+    # V1.5: compute NTM P/E from forward EPS × latest price.
+    # No TTM multiples — user explicitly excluded them.
+    if not estimates.empty:
+        latest_prices = pd.read_sql_query(
+            "SELECT ticker, adj_close FROM prices WHERE date = (SELECT MAX(date) FROM prices)",
+            conn,
+        )
+        estimates = estimates.merge(latest_prices, on="ticker", how="left")
+        estimates["ntm_pe"] = estimates.apply(
+            lambda r: (r["adj_close"] / r["forward_eps"])
+            if pd.notna(r.get("forward_eps")) and pd.notna(r.get("adj_close"))
+            and r["forward_eps"] > 0 else None,
+            axis=1,
+        )
     earnings = pd.read_sql_query("SELECT * FROM earnings_calendar", conn)
     actions = pd.read_sql_query(
         """SELECT ticker, action_date, firm, from_grade, to_grade, action
@@ -220,8 +234,8 @@ SIGNAL_DESCRIPTIONS = {
     "pct_from_52w_high": ("% from 52w high", "Price relative to trailing 52-week high."),
     "rs_vs_qqq_3m": ("RS vs QQQ (overlay)", "3m return − QQQ 3m return. Trend."),
     "rs_vs_xlk_3m": ("RS vs XLK (overlay)", "3m return − XLK 3m return. Trend."),
-    "ttm_pe": ("TTM P/E", "Price ÷ trailing-12m diluted EPS."),
-    "ev_sales": ("EV/Sales (TTM)", "(Market cap + debt − cash) ÷ trailing-12m revenue."),
+    # ttm_pe and ev_sales removed in V1.5 — TTM multiples not used.
+    # NTM P/E is shown on drill-down's live-overlay card.
     "insider_net_90d_signed": ("Insider net 90d (signed)", "Σ Form 4 net $ over trailing 90d."),
     "insider_net_90d_abs": ("Insider |net 90d| (overlay)", "Magnitude of insider activity."),
     "short_volume_ratio_14d": ("Short volume 14d ratio", "FINRA Reg SHO short-vol/total-vol, 14d avg."),
@@ -352,12 +366,14 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
     if est_row is not None and isinstance(est_row, pd.Series):
         rec_key = est_row.get('recommendation_key', '—') or '—'
         rec_class = "rec-buy" if rec_key in ("strong_buy", "buy") else ("rec-sell" if rec_key in ("sell", "strong_sell") else "")
+        ntm_pe = est_row.get('ntm_pe')
+        ntm_pe_str = f"{ntm_pe:.1f}x" if pd.notna(ntm_pe) and ntm_pe is not None else "—"
         est_html = f"""
         <div class=card>
-            <h4>📊 Live overlay (Yahoo / consensus snapshot)</h4>
+            <h4>📊 Live overlay (Yahoo / consensus snapshot — context only, NOT in composite)</h4>
             <div class=overlay-grid>
-                <div><span class=overlay-label>Forward EPS</span><span class=overlay-val>{fmt(est_row.get('forward_eps'), 2)}</span></div>
-                <div><span class=overlay-label>Trailing EPS</span><span class=overlay-val>{fmt(est_row.get('trailing_eps'), 2)}</span></div>
+                <div><span class=overlay-label>NTM P/E</span><span class=overlay-val>{ntm_pe_str}</span></div>
+                <div><span class=overlay-label>Forward EPS (NTM)</span><span class=overlay-val>{fmt(est_row.get('forward_eps'), 2)}</span></div>
                 <div><span class=overlay-label>Target mean</span><span class=overlay-val>${fmt(est_row.get('target_mean_price'), 2)}</span></div>
                 <div><span class=overlay-label>Target dispersion</span><span class=overlay-val>{fmt(est_row.get('target_dispersion'), 2)}</span></div>
                 <div><span class=overlay-label># analysts</span><span class=overlay-val>{fmt_int(est_row.get('num_analyst_opinions'))}</span></div>
@@ -509,7 +525,7 @@ def render_glossary() -> str:
 <li><b>Pos</b> — Positioning (insider Form 4, FINRA short volume, NASDAQ true SI days-to-cover)</li>
 <li><b>Tech</b> — Technical/momentum: sentiment expressed via price action (returns, RSI, distance from 200d MA, % from 52w high)</li>
 </ul>
-<p><b>Val</b> (TTM P/E, EV/Sales) is shown on drill-downs as overlay context but <b>NOT</b> in the composite — V1.5 design choice: tool measures sentiment/positioning only, valuation is fundamental analysis you do separately.</p>
+<p><b>NTM P/E</b> (price ÷ forward consensus EPS) is shown on per-ticker drill-downs as overlay context only — <b>NOT</b> in the composite. Tool measures sentiment / positioning only; valuation is fundamental analysis done separately. <b>No TTM multiples are used</b> — only NTM (forward) per design choice.</p>
 </div>
 
 <div class=gloss-card>

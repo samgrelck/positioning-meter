@@ -19,14 +19,16 @@ from lib.config import project_path
 
 
 SIGNALS = [
-    "ret_1m", "ret_3m", "ret_6m", "ret_12m",
+    # technical (composite)
+    "ret_1m", "ret_3m", "ret_6m",
     "dist_200ma", "rsi_14", "pct_from_52w_high",
-    "rs_vs_qqq_3m", "rs_vs_xlk_3m",
-    "ttm_pe", "ev_sales",
-    "insider_net_90d_signed", "insider_net_90d_abs",
-    "short_volume_ratio_14d",
-    "hf_count_13f", "hf_top_concentration", "hf_count_change_4q",
-    "si_true_dtc",
+    # technical (overlay — trend signals)
+    "ret_12m", "rs_vs_qqq_3m", "rs_vs_xlk_3m",
+    # positioning (composite)
+    "insider_net_90d_signed", "short_volume_ratio_14d", "si_true_dtc",
+    # positioning (overlay — trend / weak signals)
+    "insider_net_90d_abs", "hf_count_13f", "hf_top_concentration", "hf_count_change_4q",
+    # V1.5: ttm_pe, ev_sales removed (no TTM multiples used)
 ]
 
 REPORT_JSON = project_path("data/backtest_results.json")

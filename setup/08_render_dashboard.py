@@ -126,17 +126,20 @@ def load_data():
             if wash_today and not wash_week_ago:
                 new_wash.append(t)
 
-    # Sparklines (last ~30 days)
+    # Per-ticker temperature: 30d sparkline (header) + 180d larger chart (drill-down)
     spark_df = pd.read_sql_query(
-        "SELECT ticker, date, temperature FROM composite_daily WHERE date >= date(?, '-45 days')",
+        "SELECT ticker, date, temperature FROM composite_daily WHERE date >= date(?, '-200 days')",
         conn, params=(latest,), parse_dates=["date"],
     )
     sparkline_data = {}
+    chart_data = {}
     if not spark_df.empty:
         for t, grp in spark_df.groupby("ticker"):
-            vals = grp.sort_values("date")["temperature"].dropna().tolist()
-            if vals:
+            srt = grp.sort_values("date")[["date", "temperature"]].dropna()
+            if len(srt) > 0:
+                vals = srt["temperature"].tolist()
                 sparkline_data[t] = vals[-30:]
+                chart_data[t] = [(d.strftime("%Y-%m-%d"), v) for d, v in zip(srt["date"], vals)][-180:]
 
     # Per-ticker per-signal data (latest day)
     sig_long = pd.read_sql_query(
@@ -187,6 +190,7 @@ def load_data():
         "notes": notes,
         "watchlist": watchlist,
         "sparklines": sparkline_data,
+        "chart_data": chart_data,
         "new_late": new_late,
         "new_wash": new_wash,
         "provenance": compute_provenance(),
@@ -240,6 +244,7 @@ SIGNAL_DESCRIPTIONS = {
     "insider_net_90d_abs": ("Insider |net 90d| (overlay)", "Magnitude of insider activity."),
     "short_volume_ratio_14d": ("Short volume 14d ratio", "FINRA Reg SHO short-vol/total-vol, 14d avg."),
     "si_true_dtc": ("Short interest days-to-cover", "NASDAQ true SI ÷ avg daily share volume."),
+    "eps_revision_4w": ("EPS revision % 4w (overlay)", "% change in NTM forward EPS over trailing 20 trading days. Forward-only — accumulating since estimates ingestion started; null for early dates."),
     "hf_count_13f": ("HF count 13F (overlay)", "# of curated HFs holding the name."),
     "hf_top_concentration": ("HF top-5 concentration (overlay)", "Top-5 HFs' $ as % of total HF $ in name."),
     "hf_count_change_4q": ("HF count Δ4q (overlay)", "Q/Q change in HF holders."),
@@ -303,8 +308,59 @@ def render_summary_table(df: pd.DataFrame, title: str, subtitle: str = "",
     """
 
 
+def _render_6m_chart(series: list) -> str:
+    """Larger SVG line chart of temperature over the last ~6 months.
+    series = list of (date_str, value) tuples."""
+    if not series or len(series) < 5:
+        return ""
+    w, h = 700, 140
+    pad_l, pad_r, pad_t, pad_b = 30, 8, 12, 24
+    plot_w = w - pad_l - pad_r
+    plot_h = h - pad_t - pad_b
+    n = len(series)
+    vals = [v for _, v in series]
+    mn, mx = 0, 100  # fixed scale 0-100 for temperature
+    # Bands at 30/70
+    y30 = pad_t + (1 - 30 / 100) * plot_h
+    y70 = pad_t + (1 - 70 / 100) * plot_h
+    y50 = pad_t + (1 - 50 / 100) * plot_h
+    pts = []
+    for i, (_, v) in enumerate(series):
+        x = pad_l + i * plot_w / (n - 1)
+        y = pad_t + (1 - v / 100) * plot_h
+        pts.append(f"{x:.1f},{y:.1f}")
+    polyline = " ".join(pts)
+    last_v = vals[-1]
+    last_color = "#dc2626" if last_v >= 70 else ("#10b981" if last_v <= 30 else "#6366f1")
+    # X-axis labels: first / midpoint / last date
+    first_d, mid_d, last_d = series[0][0], series[n // 2][0], series[-1][0]
+    return f"""
+    <svg class=spark-6m width="{w}" height="{h}" viewBox="0 0 {w} {h}" aria-label="6-month temperature chart">
+      <!-- Reference bands -->
+      <rect x="{pad_l}" y="{pad_t}" width="{plot_w}" height="{y70 - pad_t:.1f}" fill="#fef2f2"/>
+      <rect x="{pad_l}" y="{y30:.1f}" width="{plot_w}" height="{plot_h - (y30 - pad_t):.1f}" fill="#f0fdf4"/>
+      <line x1="{pad_l}" y1="{y50:.1f}" x2="{w - pad_r}" y2="{y50:.1f}" stroke="#cbd5e1" stroke-dasharray="3,3" stroke-width="0.5"/>
+      <line x1="{pad_l}" y1="{y30:.1f}" x2="{w - pad_r}" y2="{y30:.1f}" stroke="#10b981" stroke-dasharray="2,2" stroke-width="0.5" opacity="0.6"/>
+      <line x1="{pad_l}" y1="{y70:.1f}" x2="{w - pad_r}" y2="{y70:.1f}" stroke="#dc2626" stroke-dasharray="2,2" stroke-width="0.5" opacity="0.6"/>
+      <!-- Y-axis labels -->
+      <text x="2" y="{pad_t + 4}" font-size="10" fill="#94a3b8">100</text>
+      <text x="2" y="{y70 + 3:.1f}" font-size="10" fill="#dc2626">70</text>
+      <text x="2" y="{y50 + 3:.1f}" font-size="10" fill="#94a3b8">50</text>
+      <text x="2" y="{y30 + 3:.1f}" font-size="10" fill="#10b981">30</text>
+      <text x="2" y="{h - pad_b + 4}" font-size="10" fill="#94a3b8">0</text>
+      <!-- Line -->
+      <polyline fill="none" stroke="{last_color}" stroke-width="1.5" points="{polyline}" />
+      <circle cx="{pts[-1].split(',')[0]}" cy="{pts[-1].split(',')[1]}" r="3" fill="{last_color}"/>
+      <!-- X-axis labels -->
+      <text x="{pad_l}" y="{h - 6}" font-size="10" fill="#94a3b8">{first_d}</text>
+      <text x="{pad_l + plot_w / 2 - 35}" y="{h - 6}" font-size="10" fill="#94a3b8">{mid_d}</text>
+      <text x="{w - pad_r - 60}" y="{h - 6}" font-size="10" fill="#94a3b8">{last_d}</text>
+    </svg>
+    """
+
+
 def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
-                     sparkline, notes_row, sector_groups, cluster_mates, sector_mates) -> str:
+                     sparkline, chart_series, notes_row, sector_groups, cluster_mates, sector_mates) -> str:
     t = snap_row["ticker"]
     name = snap_row.get("name") or t
 
@@ -412,10 +468,12 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
     notes_text = ""
     if notes_row is not None and isinstance(notes_row, pd.Series):
         notes_text = notes_row.get("note", "") or ""
+    # Editable textarea — JS hooks up localStorage save
     notes_html = f"""
     <div class=card>
-        <h4>📝 Notes</h4>
-        <pre class=notes>{notes_text or '(no notes — edit via SQLite: INSERT OR REPLACE INTO ticker_notes (ticker, note, updated_at) VALUES (...))'}</pre>
+        <h4>📝 Notes <span class=hint style="font-weight:normal">(saved to your browser's localStorage — use Export Notes button at top to persist to SQL)</span></h4>
+        <textarea class=notes-edit data-ticker="{t}" rows=3 placeholder="Write a thesis note, observation, follow-up...">{notes_text}</textarea>
+        <div class=notes-meta><span class=notes-status data-ticker="{t}"></span></div>
     </div>
     """
 
@@ -427,7 +485,9 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
     <section class=drilldown id="t-{t}" data-ticker="{t}">
         <div class=drilldown-header>
             <div class=drilldown-title>
-                <h3><a href="#top" class=back title="back to top">↑</a> {t}<span class=ticker-name>{name}</span></h3>
+                <h3><a href="#top" class=back title="back to top">↑</a> {t}<span class=ticker-name>{name}</span>
+                <button class=watch-toggle data-ticker="{t}" onclick="toggleWatch('{t}')" title="Add/remove from watchlist">☆</button>
+                </h3>
                 {erng_html}
             </div>
             <div class=drilldown-temp>
@@ -437,11 +497,14 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
         </div>
         <div class=drilldown-stats>
             <div class=stat><span class=stat-label>Pos</span><span class="stat-val {temp_class(snap_row.get('score_positioning'))}">{fmt(snap_row.get('score_positioning'))}</span></div>
-            <div class=stat><span class=stat-label>Val</span><span class="stat-val {temp_class(snap_row.get('score_valuation'))}">{fmt(snap_row.get('score_valuation'))}</span></div>
             <div class=stat><span class=stat-label>Tech</span><span class="stat-val {temp_class(snap_row.get('score_technical'))}">{fmt(snap_row.get('score_technical'))}</span></div>
             <div class=stat><span class=stat-label>Conv</span><span class=stat-val>{fmt(snap_row.get('conviction'))}</span></div>
             <div class=stat><span class=stat-label>Anom</span><span class=stat-val>{fmt(snap_row.get('anomaly_count'), 0)}</span></div>
             <div class=stat-spark>{spark_svg}</div>
+        </div>
+        <div class=chart-card>
+            <div class=chart-card-label>📈 Temperature, last 6 months (red zone ≥70 = hot, green zone ≤30 = cold)</div>
+            {_render_6m_chart(chart_series)}
         </div>
         {sig_table}
         {est_html}
@@ -467,40 +530,94 @@ def render_provenance(prov: dict) -> str:
     """
 
 
+def _render_decile_bars(decile_means: dict, label: str = "") -> str:
+    """Render a small SVG bar chart of decile mean forward returns."""
+    if not decile_means:
+        return ""
+    vals = [decile_means.get(d) or decile_means.get(str(d)) or 0 for d in range(10)]
+    w, h, pad_l, pad_r, pad_t, pad_b = 240, 60, 4, 4, 4, 12
+    bar_w = (w - pad_l - pad_r) / 10
+    mn = min(vals)
+    mx = max(vals)
+    rng = max(abs(mn), abs(mx)) or 0.01
+    mid_y = pad_t + (h - pad_t - pad_b) / 2
+    bars = []
+    for i, v in enumerate(vals):
+        x = pad_l + i * bar_w + 1
+        bw = max(bar_w - 2, 1)
+        bh = abs(v) / rng * (h - pad_t - pad_b) / 2
+        if v >= 0:
+            y = mid_y - bh
+            color = "#dc2626"  # red — top decile pos return is "bad" for high-temp = late
+        else:
+            y = mid_y
+            color = "#10b981"  # green — bot decile neg return is contrarian-good
+        bars.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bw:.1f}" height="{bh:.1f}" fill="{color}" opacity="0.85"/>')
+    return f"""
+    <svg class=spark width="{w}" height="{h}" viewBox="0 0 {w} {h}" aria-label="decile mean forward return bars">
+        <line x1="{pad_l}" y1="{mid_y:.1f}" x2="{w - pad_r}" y2="{mid_y:.1f}" stroke="#cbd5e1" stroke-width="0.5"/>
+        {''.join(bars)}
+        <text x="{pad_l}" y="{h - 2}" font-size="9" fill="#94a3b8">cold</text>
+        <text x="{w - pad_r - 18}" y="{h - 2}" font-size="9" fill="#94a3b8">hot</text>
+    </svg>
+    """
+
+
 def render_backtest_card(results: list) -> str:
     if not results:
         return ""
     composite = [r for r in results if r["signal"] == "COMPOSITE_TEMPERATURE"]
     sig_results = [r for r in results if r["signal"] != "COMPOSITE_TEMPERATURE"]
 
+    # Best row per signal
     by_sig = {}
     for r in sig_results:
         s = r["signal"]
         if s not in by_sig or (r.get("ic") is not None and abs(r["ic"]) > abs(by_sig[s].get("ic") or 0)):
             by_sig[s] = r
 
-    rows = []
-    for s in sorted(by_sig.keys(), key=lambda x: abs(by_sig[x].get("ic") or 0), reverse=True)[:12]:
+    sig_rows = []
+    for s in sorted(by_sig.keys(), key=lambda x: abs(by_sig[x].get("ic") or 0), reverse=True)[:14]:
         r = by_sig[s]
         ic = r.get("ic")
         ic_str = f"{ic:+.4f}" if ic is not None else "—"
         ic_cls = "chg-down" if (ic is not None and ic < 0) else ("chg-up" if ic is not None and ic > 0 else "")
-        rows.append(f"<tr><td class=mono>{s}</td><td class=mono>{r['kind']} @ {r['horizon']}</td><td class='num mono {ic_cls}'>{ic_str}</td><td class=num>{r.get('top_hit_rate', 0):.1%}</td><td class=num>{r.get('bot_hit_rate', 0):.1%}</td></tr>")
+        bars = _render_decile_bars(r.get("decile_means", {}))
+        sig_rows.append(f"""
+            <tr>
+                <td class=mono>{s}</td>
+                <td class=mono>{r['kind']} @ {r['horizon']}</td>
+                <td class='num mono {ic_cls}'>{ic_str}</td>
+                <td class=num>{r.get('top_hit_rate', 0):.1%}</td>
+                <td class=num>{r.get('bot_hit_rate', 0):.1%}</td>
+                <td>{bars}</td>
+            </tr>
+        """)
 
     comp_rows = []
     for r in composite:
         ic = r.get("ic")
         ic_cls = "chg-down" if ic and ic < 0 else "chg-up"
-        comp_rows.append(f"<tr><td><b>Composite (V1.5)</b></td><td>{r['horizon']}</td><td class='num mono {ic_cls}'>{ic:+.4f}</td><td class=num>{r['top_hit_rate']:.1%}</td><td class=num>{r['bot_hit_rate']:.1%}</td></tr>")
+        bars = _render_decile_bars(r.get("decile_means", {}))
+        comp_rows.append(f"""
+            <tr>
+                <td><b>Composite (V1.6)</b></td>
+                <td>{r['horizon']}</td>
+                <td class='num mono {ic_cls}'>{ic:+.4f}</td>
+                <td class=num>{r['top_hit_rate']:.1%}</td>
+                <td class=num>{r['bot_hit_rate']:.1%}</td>
+                <td>{bars}</td>
+            </tr>
+        """)
 
     return f"""
     <div class="panel" id="backtest-panel">
-        <h3>📈 Backtest validation (V1.5)</h3>
-        <p class=hint>Information Coefficient (Spearman) per signal vs forward returns. <b class=chg-down>Negative IC</b> = contrarian (high signal predicts negative forward return). Top/bot hit rates measure decile reliability.</p>
+        <h3>📈 Backtest validation (V1.6)</h3>
+        <p class=hint>Information Coefficient (Spearman) per signal vs forward returns. <b class=chg-down>Negative IC</b> = contrarian (high signal → negative forward return). Bars show decile-mean forward returns: 10 bars left-to-right = bottom-decile (cold) → top-decile (hot). For a working contrarian signal you want bars sloping <span class=chg-down>green-down on the left</span> and <span class=chg-up>red-up on the right</span>.</p>
         <div class=table-wrap>
         <table class=signals>
-            <thead><tr><th>Signal</th><th>Best</th><th class=num>IC</th><th class=num>Top hit</th><th class=num>Bot hit</th></tr></thead>
-            <tbody>{''.join(comp_rows)}{''.join(rows)}</tbody>
+            <thead><tr><th>Signal</th><th>Best</th><th class=num>IC</th><th class=num>Top hit</th><th class=num>Bot hit</th><th>Decile spread (cold → hot)</th></tr></thead>
+            <tbody>{''.join(comp_rows)}{''.join(sig_rows)}</tbody>
         </table>
         </div>
     </div>
@@ -620,11 +737,12 @@ def main(asof: str | None = None):
         actions_t = data["actions"][data["actions"]["ticker"] == t]
         notes_t = notes_by_ticker.loc[t] if (not notes_by_ticker.empty and t in notes_by_ticker.index) else None
         spark = data["sparklines"].get(t, [])
+        chart_series = data["chart_data"].get(t, [])
         cluster_id = row.get("cluster_id")
         cluster_mates = [x for x in cluster_to_tickers.get(cluster_id, []) if x != t][:12] if cluster_id else []
         sector_mates = {sg: sector_groups[sg]["tickers"] for sg in ticker_to_sectors.get(t, [])}
         drilldowns.append(render_drilldown(
-            row, sig_t, est_t, earn_t, actions_t, spark, notes_t, sector_groups, cluster_mates, sector_mates
+            row, sig_t, est_t, earn_t, actions_t, spark, chart_series, notes_t, sector_groups, cluster_mates, sector_mates
         ))
 
     # All-names data for JS-rendered table
@@ -918,7 +1036,10 @@ tr:hover td {{ background: #f8fafc; }}
 .drilldown-temp .temp-big {{ font-size: 2.75rem; font-weight: 700; line-height: 1; font-family: 'JetBrains Mono', monospace; }}
 .drilldown-temp .temp-sub {{ font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }}
 .tag-earnings {{ display: inline-block; background: #fef3c7; color: #92400e; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-top: 0.4rem; }}
-.drilldown-stats {{ display: grid; grid-template-columns: repeat(5, 1fr) auto; gap: 0.625rem; margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--border); align-items: center; }}
+.drilldown-stats {{ display: grid; grid-template-columns: repeat(4, 1fr) auto; gap: 0.625rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); align-items: center; }}
+.chart-card {{ background: #f8fafc; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; }}
+.chart-card-label {{ font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 500; }}
+.spark-6m {{ display: block; width: 100%; max-width: 700px; height: auto; }}
 .stat {{ background: #f8fafc; padding: 0.625rem; border-radius: 6px; text-align: center; }}
 .stat-label {{ display: block; font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.03em; font-weight: 500; }}
 .stat-val {{ display: block; font-size: 1.125rem; font-weight: 600; margin-top: 0.2rem; font-family: 'JetBrains Mono', monospace; }}
@@ -939,6 +1060,15 @@ tr:hover td {{ background: #f8fafc; }}
 .peer-link {{ color: var(--primary); text-decoration: none; padding: 0 2px; font-family: 'JetBrains Mono', monospace; }}
 .peer-link:hover {{ text-decoration: underline; }}
 .notes {{ background: white; border: 1px solid var(--border); padding: 0.625rem 0.875rem; font-family: inherit; font-size: 0.8125rem; min-height: 30px; margin: 0; white-space: pre-wrap; border-radius: 6px; }}
+.notes-edit {{ width: 100%; background: white; border: 1px solid var(--border); padding: 0.625rem 0.875rem; font-family: inherit; font-size: 0.8125rem; border-radius: 6px; resize: vertical; min-height: 60px; box-sizing: border-box; }}
+.notes-edit:focus {{ outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }}
+.notes-meta {{ font-size: 0.7rem; color: var(--text-muted); margin-top: 0.3rem; min-height: 14px; }}
+.notes-status.saved {{ color: var(--cold); }}
+.watch-toggle {{ background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #cbd5e1; vertical-align: middle; padding: 0 0.3rem; transition: transform 0.1s, color 0.15s; }}
+.watch-toggle:hover {{ transform: scale(1.15); }}
+.watch-toggle.watched {{ color: #f59e0b; }}
+.watched-row {{ background: #fffbeb !important; }}
+.ticker-pill.watched::before {{ content: "★ "; color: #f59e0b; font-size: 0.7em; }}
 
 /* Footer cards */
 .footer-card {{
@@ -995,8 +1125,9 @@ tr:hover td {{ background: #f8fafc; }}
 <input type=text id=search placeholder="🔍 Search ticker or name…" oninput=filterAll()>
 <select id=cluster onchange=filterAll()>{cluster_options}</select>
 <select id=sector onchange=filterAll()>{sg_options}</select>
-<button onclick=exportCSV()>📥 Export CSV</button>
-<button onclick=clearFilters() class=secondary>Clear</button>
+<button onclick=exportCSV() title="Download current snapshot as CSV">📥 CSV</button>
+<button onclick=exportNotes() title="Download SQL file to persist your notes + watchlist back to the DB" class=secondary>💾 Export Notes/Watchlist SQL</button>
+<button onclick=clearFilters() class=secondary>↻ Clear filters</button>
 <span id=count></span>
 </div>
 
@@ -1228,6 +1359,119 @@ window.addEventListener('hashchange', () => {{
 if (window.location.hash.startsWith('#t-')) {{
   showTab('detail');
 }}
+
+// === Notes (localStorage) ===
+function loadNotes() {{
+  document.querySelectorAll('textarea.notes-edit').forEach(ta => {{
+    const t = ta.dataset.ticker;
+    const stored = localStorage.getItem('note_' + t);
+    if (stored !== null && stored !== '') ta.value = stored;
+    ta.addEventListener('input', () => saveNote(t, ta));
+  }});
+}}
+function saveNote(ticker, ta) {{
+  const v = ta.value;
+  if (v.trim() === '') {{
+    localStorage.removeItem('note_' + ticker);
+  }} else {{
+    localStorage.setItem('note_' + ticker, v);
+  }}
+  const status = document.querySelector(`.notes-status[data-ticker="${{ticker}}"]`);
+  if (status) {{
+    status.textContent = '✓ saved to browser';
+    status.classList.add('saved');
+    clearTimeout(status._t);
+    status._t = setTimeout(() => {{ status.textContent = ''; status.classList.remove('saved'); }}, 1500);
+  }}
+}}
+
+// === Watchlist (localStorage) ===
+function getWatchlist() {{
+  try {{ return JSON.parse(localStorage.getItem('watchlist') || '[]'); }} catch (e) {{ return []; }}
+}}
+function setWatchlist(list) {{
+  localStorage.setItem('watchlist', JSON.stringify(list));
+}}
+function isWatched(t) {{ return getWatchlist().includes(t); }}
+function toggleWatch(t) {{
+  let list = getWatchlist();
+  if (list.includes(t)) {{
+    list = list.filter(x => x !== t);
+  }} else {{
+    list.push(t);
+  }}
+  setWatchlist(list);
+  applyWatchedStyling();
+}}
+function applyWatchedStyling() {{
+  const watched = new Set(getWatchlist());
+  document.querySelectorAll('.watch-toggle').forEach(btn => {{
+    const t = btn.dataset.ticker;
+    if (watched.has(t)) {{
+      btn.classList.add('watched');
+      btn.textContent = '★';
+    }} else {{
+      btn.classList.remove('watched');
+      btn.textContent = '☆';
+    }}
+  }});
+  document.querySelectorAll('.ticker-pill').forEach(a => {{
+    const t = a.textContent.trim();
+    a.classList.toggle('watched', watched.has(t));
+  }});
+  document.querySelectorAll('table.rank tbody tr').forEach(tr => {{
+    const t = tr.dataset.ticker;
+    tr.classList.toggle('watched-row', watched.has(t));
+  }});
+}}
+
+// === Export notes + watchlist as SQL ===
+function exportNotes() {{
+  const lines = [
+    "-- Positioning Meter — notes + watchlist export",
+    "-- Generated: " + new Date().toISOString(),
+    "-- Run: sqlite3 data/positioning.db < this_file.sql",
+    ""
+  ];
+  // Notes
+  const noteEntries = [];
+  for (let i = 0; i < localStorage.length; i++) {{
+    const k = localStorage.key(i);
+    if (k.startsWith('note_')) {{
+      const t = k.slice(5);
+      const v = localStorage.getItem(k).replaceAll("'", "''");
+      noteEntries.push(`INSERT OR REPLACE INTO ticker_notes (ticker, note, updated_at) VALUES ('${{t}}', '${{v}}', date('now'));`);
+    }}
+  }}
+  if (noteEntries.length > 0) {{
+    lines.push("-- Notes (" + noteEntries.length + ")");
+    lines.push(...noteEntries, "");
+  }}
+  // Watchlist
+  const wl = getWatchlist();
+  if (wl.length > 0) {{
+    lines.push("-- Watchlist (" + wl.length + ")");
+    lines.push("DELETE FROM watchlist;  -- replace existing");
+    wl.forEach(t => lines.push(`INSERT INTO watchlist (ticker, label, added_at) VALUES ('${{t}}', '', date('now'));`));
+  }}
+  if (noteEntries.length === 0 && wl.length === 0) {{
+    alert('No notes or watchlist entries to export. Add some first by writing in a notes box or starring a ticker.');
+    return;
+  }}
+  const blob = new Blob([lines.join('\\n')], {{type: 'text/plain'}});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `positioning_notes_${{new Date().toISOString().slice(0,10)}}.sql`;
+  a.click();
+  URL.revokeObjectURL(url);
+}}
+
+// Init notes + watchlist after DOM is ready
+document.addEventListener('DOMContentLoaded', () => {{
+  loadNotes();
+  applyWatchedStyling();
+}});
 </script>
 </body></html>
 """

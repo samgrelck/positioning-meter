@@ -3,7 +3,7 @@
 > Single source of truth for current state. Updated after each milestone.
 > Sister docs: `DESIGN.md` (architecture), `QUESTIONS.md` (decisions/caveats), `GITHUB_SETUP.md` (publishing), `data/backtest_report.md` (latest backtest).
 
-**Last updated:** 2026-05-09 — **V1.5: valuation moved to overlay (sentiment/positioning-only composite)**
+**Last updated:** 2026-05-10 — **V1.6: positioning-weighted composite (0.7/0.3) + dashboard QoL upgrades**
 
 ---
 
@@ -13,7 +13,7 @@
 |---|---|
 | Universe | 366 TMT names, mcap ≥ $1.5B, drawn from theme_detector |
 | Backtest horizon | 10y for most signals; 6.5y for short volume; 1y for true SI |
-| Composite output | working — IC **−0.020**, decile spread −2.09%, bot decile hit 56% at 3m fwd (V1.5) |
+| Composite output | working — IC **−0.026**, decile spread −2.64%, bot decile hit 56% at 3m fwd (V1.6 — re-weighted to 0.7 pos / 0.3 tech via grid search) |
 | Composite scope | **sentiment / positioning only** — valuation is overlay (V1.5 design choice, not backtest-forced) |
 | Dashboard | `data/dashboard.html` (also at `docs/index.html` for GitHub Pages) — interactive search, filter, drill-down, CSV export, glossary |
 | Backtest report | `data/backtest_report.md` |
@@ -41,7 +41,8 @@ The composite now reads PURELY sentiment + positioning. Names that look "hot" in
 | V1.3 | HF count signals → overlay | −0.016 | −0.010 | 56% | 56% |
 | V1.4 | HF concentration → overlay; only `si_true_dtc` kept | −0.020 | −0.021 | 56% | 56% |
 | V1.4 + min2 | Require ≥2 buckets present | −0.019 | −0.022 | 56% | 56% |
-| **V1.5** | **Valuation → overlay (sentiment/positioning only)** | **−0.020** | **−0.020** | **55%** | **56%** |
+| V1.5 | Valuation → overlay (sentiment/positioning only) | −0.020 | −0.020 | 55% | 56% |
+| **V1.6** | **Re-weight composite via grid search: pos 0.7 / tech 0.3** | **−0.020** | **−0.026** | **55%** | **56%** |
 
 ## Data ingestion status
 

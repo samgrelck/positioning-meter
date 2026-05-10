@@ -58,6 +58,9 @@ OVERLAY_SIGNALS = {
     "hf_count_13f": "positioning_trend_overlay",
     "hf_count_change_4q": "positioning_trend_overlay",
     "hf_top_concentration": "positioning_overlay",
+    # Forward-only — null until we accumulate ≥ 20 days of estimates_daily snapshots.
+    # Could promote to composite later once backtest data exists.
+    "eps_revision_4w": "expectations_overlay",
 }
 
 # All signals to compute and persist (composite + overlay):
@@ -86,6 +89,7 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
     short_vol = loaders.load_short_volume()
     si_true = loaders.load_si_true(closes.index)
     hf_panels = loaders.load_hf_holdings_panels(closes.index)
+    eps_revisions_4w = loaders.load_eps_revisions_panel(closes.index, lookback_days=20)
     universe = loaders.load_universe()
 
     # Restrict signal computation to our universe (drop ETFs from output panel
@@ -118,6 +122,9 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
     # Rename si_true_pct_adv -> si_true_dtc to match SIGNAL_TO_BUCKET
     if "si_true_pct_adv" in pos_signals:
         pos_signals["si_true_dtc"] = pos_signals.pop("si_true_pct_adv")
+    # Add EPS revisions overlay (forward-only — null until we accumulate history)
+    if not eps_revisions_4w.empty:
+        pos_signals["eps_revision_4w"] = eps_revisions_4w
 
     raw_signals: dict[str, pd.DataFrame] = {}
     raw_signals.update(tech_signals)

@@ -39,16 +39,18 @@ signals:
     min_avg_contract_volume: 1000
 
 composite:
-  # V1.5: valuation removed from composite (overlay-only). Tool is sentiment /
-  # positioning / expectations focused; valuation is fundamental, assessed
-  # separately by analyst. Buckets: positioning + technical now; options +
-  # flows when implemented.
+  # V1.5: valuation excluded (overlay-only).
+  # V1.6 (tools/tune_weights.py grid search): positioning dominates.
+  #   At 50/50: IC -0.020, spread -2.09%
+  #   At 70/30: IC -0.026, spread -2.64%  <-- chosen
+  #   At 90/10: IC -0.027 (literal optimum, but risks overfit)
+  # 0.7/0.3 = positioning-dominant, technical-meaningful, near-optimal.
   bucket_weights:
-    positioning: 0.50
-    technical: 0.50
+    positioning: 0.70
+    technical: 0.30
     options: 0.00   # placeholder for Phase 5
     flows: 0.00     # placeholder
-    valuation: 0.00  # excluded — was 0.20 in V1.4
+    valuation: 0.00  # excluded — V1.5
   dual_percentile_weights:
     pct_self: 0.5
     pct_peer: 0.5

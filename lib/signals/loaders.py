@@ -92,6 +92,31 @@ def load_universe() -> pd.DataFrame:
     return pd.read_csv(project_path(cfg["universe"]["output_csv"]))
 
 
+def load_eps_revisions_panel(prices_index: pd.DatetimeIndex, lookback_days: int = 20) -> pd.DataFrame:
+    """Per-ticker rolling change in forward EPS over `lookback_days`.
+
+    Reads estimates_daily.forward_eps history (forward-only — accumulates from
+    when we started snapshotting). Returns empty if we have <2 snapshots per
+    ticker yet.
+    """
+    conn = connect()
+    df = pd.read_sql_query(
+        "SELECT ticker, date, forward_eps FROM estimates_daily WHERE forward_eps IS NOT NULL",
+        conn, parse_dates=["date"],
+    )
+    conn.close()
+    if df.empty:
+        return pd.DataFrame(index=prices_index)
+    wide = df.pivot_table(index="date", columns="ticker", values="forward_eps", aggfunc="last").sort_index()
+    if len(wide) < 2:
+        return pd.DataFrame(index=prices_index)
+    # Forward-fill across calendar days, then compute % change over lookback
+    full_idx = pd.date_range(wide.index.min(), max(wide.index.max(), prices_index.max()), freq="D")
+    wide = wide.reindex(full_idx).ffill()
+    revision = (wide / wide.shift(lookback_days) - 1) * 100  # % change in NTM EPS
+    return revision.reindex(prices_index, method="ffill")
+
+
 def load_si_true(prices_index: pd.DatetimeIndex) -> pd.DataFrame:
     """True SI as days-to-cover, NASDAQ API, forward-filled to daily."""
     conn = connect()

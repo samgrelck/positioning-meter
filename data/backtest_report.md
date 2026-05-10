@@ -1,6 +1,6 @@
 # Positioning Meter — Backtest Report
 
-Generated: 2026-05-10 15:11:34.577445
+Generated: 2026-05-10 15:23:57.380233
 
 Universe: 366 TMT names (mcap >= $1.5B)
 
@@ -108,9 +108,9 @@ Forward horizons: ['1w', '1m', '3m']
 
 | Signal | Horizon | N | IC | Decile spread | Top dec hit | Bot dec hit |
 |---|---|---|---|---|---|---|
-| COMPOSITE_TEMPERATURE | 1w | 544,851 | -0.0132 | -0.0037 | 47.92% | 53.66% |
-| COMPOSITE_TEMPERATURE | 1m | 539,111 | -0.0197 | -0.0103 | 46.94% | 55.12% |
-| COMPOSITE_TEMPERATURE | 3m | 524,229 | -0.0202 | -0.0209 | 45.66% | 55.55% |
+| COMPOSITE_TEMPERATURE | 1w | 544,851 | -0.0115 | -0.0032 | 47.72% | 53.40% |
+| COMPOSITE_TEMPERATURE | 1m | 539,111 | -0.0200 | -0.0124 | 47.57% | 55.29% |
+| COMPOSITE_TEMPERATURE | 3m | 524,229 | -0.0257 | -0.0264 | 45.88% | 55.58% |
 
 ## Interpretation guide
 

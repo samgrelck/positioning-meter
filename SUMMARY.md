@@ -10,17 +10,24 @@
 ## 🚀 Daily use
 
 ```bash
+# Just refresh dashboard from current DB (no fresh data, ~1 min):
 cd ~/Documents/AI\ workflows/positioning_meter && ./tools/deploy.sh
+
+# Full daily refresh: pull fresh data + recompute + push (~70 min):
+cd ~/Documents/AI\ workflows/positioning_meter && ./tools/refresh_data.sh
+
+# Faster: skip Yahoo estimates + options (~16 min):
+./tools/refresh_data.sh fast
 ```
 
-That one command: recomputes signals → re-runs backtest → renders dashboard → copies to `docs/` → commits + pushes to GitHub. ~1 minute total. GitHub Pages updates ~30 seconds after push.
+`deploy.sh` recomputes signals → re-runs backtest → renders dashboard → copies to `docs/` → commits + pushes to GitHub. GitHub Pages updates ~30 seconds after push.
 
-To open the local dashboard without pushing:
+`refresh_data.sh` runs the daily-cadence ingestion scripts (prices, options, estimates, ETF AUM, insider Form 4) THEN calls deploy.sh.
+
+To open local dashboard without pushing:
 ```bash
 open ~/Documents/AI\ workflows/positioning_meter/data/dashboard.html
 ```
-
-To refresh source data first (before deploy.sh), see [README.md → Refreshing source data](README.md#refreshing-source-data-run-as-often-as-you-want--daily-weekly-etc).
 
 ## ✅ System status: fully operational
 

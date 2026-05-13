@@ -195,18 +195,18 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
         bucket = ALL_SIGNALS.get(sig_name, "technical")
         ps = pct_self[sig_name]
         pp = pct_peer.get(sig_name)
-        long = raw_panel.stack(dropna=True).rename("raw_value").reset_index()
+        long = raw_panel.stack(future_stack=True).dropna().rename("raw_value").reset_index()
         long.columns = ["date", "ticker", "raw_value"]
         long["signal_name"] = sig_name
         long["bucket"] = bucket
         if ps is not None and not ps.empty:
-            ps_long = ps.stack(dropna=False).rename("pct_self").reset_index()
+            ps_long = ps.stack(future_stack=True).rename("pct_self").reset_index()
             ps_long.columns = ["date", "ticker", "pct_self"]
             long = long.merge(ps_long, on=["date", "ticker"], how="left")
         else:
             long["pct_self"] = np.nan
         if pp is not None and not pp.empty:
-            pp_long = pp.stack(dropna=False).rename("pct_peer").reset_index()
+            pp_long = pp.stack(future_stack=True).rename("pct_peer").reset_index()
             pp_long.columns = ["date", "ticker", "pct_peer"]
             long = long.merge(pp_long, on=["date", "ticker"], how="left")
         else:
@@ -229,25 +229,25 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
     print("Writing composite_daily...")
     # Long form composite
     if not composite.empty:
-        comp_long = composite.stack(dropna=True).rename("temperature").reset_index()
+        comp_long = composite.stack(future_stack=True).dropna().rename("temperature").reset_index()
         comp_long.columns = ["date", "ticker", "temperature"]
 
         for bkt, panel in bucket_panels.items():
-            b_long = panel.stack(dropna=False).rename(f"score_{bkt}").reset_index()
+            b_long = panel.stack(future_stack=True).rename(f"score_{bkt}").reset_index()
             b_long.columns = ["date", "ticker", f"score_{bkt}"]
             comp_long = comp_long.merge(b_long, on=["date", "ticker"], how="left")
 
         if not conviction.empty:
-            c_long = conviction.stack(dropna=False).rename("conviction").reset_index()
+            c_long = conviction.stack(future_stack=True).rename("conviction").reset_index()
             c_long.columns = ["date", "ticker", "conviction"]
             comp_long = comp_long.merge(c_long, on=["date", "ticker"], how="left")
         if not anomaly.empty:
-            a_long = anomaly.stack(dropna=False).rename("anomaly_count").reset_index()
+            a_long = anomaly.stack(future_stack=True).rename("anomaly_count").reset_index()
             a_long.columns = ["date", "ticker", "anomaly_count"]
             comp_long = comp_long.merge(a_long, on=["date", "ticker"], how="left")
 
         for fname, fpanel in flags.items():
-            f_long = fpanel.stack(dropna=False).rename(fname).reset_index()
+            f_long = fpanel.stack(future_stack=True).rename(fname).reset_index()
             f_long.columns = ["date", "ticker", fname]
             comp_long = comp_long.merge(f_long, on=["date", "ticker"], how="left")
 

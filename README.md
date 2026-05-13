@@ -9,14 +9,18 @@ Measures how **crowded, hot, and stretched** each name is via the positioning bu
 ## 🚀 Quick reference
 
 ```bash
-# Refresh dashboard from current DB state, push to GitHub:
+# Just refresh the dashboard from current DB (no fresh data, ~1 min):
 cd ~/Documents/AI\ workflows/positioning_meter && ./tools/deploy.sh
 
-# Or just view the local dashboard:
+# Full refresh: pull fresh daily data + recompute + push (~70 min):
+cd ~/Documents/AI\ workflows/positioning_meter && ./tools/refresh_data.sh
+
+# Faster version that skips Yahoo estimates + options (~16 min):
+./tools/refresh_data.sh fast
+
+# Open the dashboard locally:
 open ~/Documents/AI\ workflows/positioning_meter/data/dashboard.html
 ```
-
-See ["Daily use"](#-daily-use--the-one-command-you-need) below for the full workflow including data refresh.
 
 ---
 

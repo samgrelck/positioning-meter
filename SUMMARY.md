@@ -18,16 +18,12 @@ cd ~/Documents/AI\ workflows/positioning_meter && ./tools/refresh_data.sh
 
 # Faster: skip Yahoo estimates + options (~16 min):
 ./tools/refresh_data.sh fast
-```
 
-`deploy.sh` recomputes signals → re-runs backtest → renders dashboard → copies to `docs/` → commits + pushes to GitHub. GitHub Pages updates ~30 seconds after push.
-
-`refresh_data.sh` runs the daily-cadence ingestion scripts (prices, options, estimates, ETF AUM, insider Form 4) THEN calls deploy.sh.
-
-To open local dashboard without pushing:
-```bash
+# Open local dashboard without pushing:
 open ~/Documents/AI\ workflows/positioning_meter/data/dashboard.html
 ```
+
+**→ Full daily-use guide + cadence guidance + troubleshooting + where-things-live: see [USAGE.md](USAGE.md).**
 
 ## ✅ System status: fully operational
 
@@ -274,6 +270,7 @@ Re-renders + commits + pushes. Pages updates in ~30 seconds.
 ```
 positioning_meter/
 ├── README.md                — public-facing project description
+├── USAGE.md                 — daily-use guide + cadence + troubleshooting
 ├── DESIGN.md                — architecture decisions
 ├── SUMMARY.md               — THIS FILE
 ├── QUESTIONS.md             — decisions log + caveats

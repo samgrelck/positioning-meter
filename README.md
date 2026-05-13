@@ -22,6 +22,8 @@ cd ~/Documents/AI\ workflows/positioning_meter && ./tools/refresh_data.sh
 open ~/Documents/AI\ workflows/positioning_meter/data/dashboard.html
 ```
 
+**→ For full daily-use guide, cadence guidance, troubleshooting, and where everything lives, see [USAGE.md](USAGE.md).**
+
 ---
 
 ## What it shows

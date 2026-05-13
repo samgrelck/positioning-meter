@@ -132,6 +132,21 @@ def load_options_panels(prices_index: pd.DatetimeIndex) -> dict[str, pd.DataFram
     vol = df.pivot_table(index="date", columns="ticker", values="options_volume", aggfunc="last").reindex(prices_index, method="ffill")
     rolling_avg = vol.rolling(20, min_periods=5).mean()
     out["options_vol_vs_20d"] = (vol / rolling_avg.replace(0, np.nan))
+
+    # === Direction inversion for contrarian framework ===
+    # In the "hot=late=contrarian-bearish" framework:
+    #   - HIGH P/C ratio = puts dominate = washout/fear = COLD (low temp)
+    #   - HIGH skew (positive: put IV > call IV) = put premium = fear = COLD
+    #   - HIGH term slope (backwardation: front > 3m) = near-term stress = COLD
+    #   - HIGH IV rank = vol elevated = panic/washout = COLD
+    # All four are naturally "fear" measures. Their HIGH readings mean
+    # capitulation/contrarian-bullish, which in our framework should give
+    # LOW temperature. We invert the raw values here so the downstream
+    # percentile-rank machinery produces the right sign.
+    invert_signals = ["pc_volume_ratio", "skew_25d", "iv_term_slope", "iv_rank_1y"]
+    for sig in invert_signals:
+        if sig in out and not out[sig].empty:
+            out[sig] = -out[sig]
     return out
 
 

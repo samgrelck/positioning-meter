@@ -1259,7 +1259,7 @@ tr:hover td {{ background: #f8fafc; }}
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.8</b> (Pos 0.60 / Tech 0.25 / Opt 0.15, IC-weighted signals, universe-rank pct_peer) · Backtest IC <b>−0.034</b> at 3m fwd · Bot decile hit <b>57%</b></div>
+<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.9</b> (Pos 0.45 / Tech 0.25 / Opt 0.30, options signals inverted to contrarian direction) · Backtest IC <b>−0.031</b> at 3m fwd · Bot decile hit <b>57%</b></div>
 </div>
 </header>
 

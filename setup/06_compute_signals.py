@@ -40,6 +40,12 @@ SIGNAL_TO_BUCKET = {
     "insider_net_90d_signed": "positioning",
     "short_volume_ratio_14d": "positioning",
     "si_true_dtc": "positioning",
+    # options — populated as data is ingested (yfinance forward-only or
+    # Polygon Options Advanced historical backfill)
+    "iv_rank_1y": "options",
+    "iv_term_slope": "options",
+    "skew_25d": "options",
+    "pc_volume_ratio": "options",
 }
 
 # Computed but excluded from composite — overlay only.
@@ -61,6 +67,11 @@ OVERLAY_SIGNALS = {
     # Forward-only — null until we accumulate ≥ 20 days of estimates_daily snapshots.
     # Could promote to composite later once backtest data exists.
     "eps_revision_4w": "expectations_overlay",
+    # Options raw IV (overlay context — IV30 is shown but iv_rank_1y is the
+    # signal that enters composite)
+    "iv_30d": "options_overlay",
+    "iv_3m": "options_overlay",
+    "options_vol_vs_20d": "options_overlay",
 }
 
 # All signals to compute and persist (composite + overlay):
@@ -90,6 +101,7 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
     si_true = loaders.load_si_true(closes.index)
     hf_panels = loaders.load_hf_holdings_panels(closes.index)
     eps_revisions_4w = loaders.load_eps_revisions_panel(closes.index, lookback_days=20)
+    options_panels = loaders.load_options_panels(closes.index)
     universe = loaders.load_universe()
 
     # Restrict signal computation to our universe (drop ETFs from output panel
@@ -125,6 +137,8 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
     # Add EPS revisions overlay (forward-only — null until we accumulate history)
     if not eps_revisions_4w.empty:
         pos_signals["eps_revision_4w"] = eps_revisions_4w
+    # Merge in options signals
+    pos_signals.update(options_panels)
 
     raw_signals: dict[str, pd.DataFrame] = {}
     raw_signals.update(tech_signals)

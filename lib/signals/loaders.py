@@ -4,6 +4,7 @@ All loaders return pandas frames indexed appropriately for vectorized math.
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from ..db import connect
@@ -90,6 +91,48 @@ def load_universe() -> pd.DataFrame:
     from ..config import load, project_path
     cfg = load()
     return pd.read_csv(project_path(cfg["universe"]["output_csv"]))
+
+
+def load_options_panels(prices_index: pd.DatetimeIndex) -> dict[str, pd.DataFrame]:
+    """Load all options signals from options_daily, reindex to prices_index.
+
+    Computed signals (per ticker per date):
+      - iv_30d, iv_3m, iv_term_slope, skew_25d, pc_volume_ratio, options_volume
+    Also derives:
+      - iv_rank_1y: percentile of today's IV30 within own trailing 252d range
+      - options_vol_vs_20d: today's vol / 20d rolling avg
+    """
+    conn = connect()
+    df = pd.read_sql_query(
+        """SELECT ticker, date, iv_30d, iv_3m, iv_term_slope, skew_25d,
+                  pc_volume_ratio, pc_oi_ratio, options_volume
+           FROM options_daily""",
+        conn, parse_dates=["date"],
+    )
+    conn.close()
+    if df.empty:
+        empty = pd.DataFrame(index=prices_index)
+        return {k: empty for k in [
+            "iv_30d", "iv_3m", "iv_term_slope", "skew_25d",
+            "pc_volume_ratio", "iv_rank_1y", "options_vol_vs_20d",
+        ]}
+
+    out = {}
+    for col in ["iv_30d", "iv_3m", "iv_term_slope", "skew_25d", "pc_volume_ratio"]:
+        out[col] = df.pivot_table(index="date", columns="ticker", values=col, aggfunc="last").reindex(prices_index, method="ffill")
+
+    # IV rank vs own 1y history
+    iv30 = out["iv_30d"]
+    rolling_min = iv30.rolling(252, min_periods=20).min()
+    rolling_max = iv30.rolling(252, min_periods=20).max()
+    rng = rolling_max - rolling_min
+    out["iv_rank_1y"] = ((iv30 - rolling_min) / rng).where(rng > 0) * 100.0
+
+    # Options volume vs 20d avg
+    vol = df.pivot_table(index="date", columns="ticker", values="options_volume", aggfunc="last").reindex(prices_index, method="ffill")
+    rolling_avg = vol.rolling(20, min_periods=5).mean()
+    out["options_vol_vs_20d"] = (vol / rolling_avg.replace(0, np.nan))
+    return out
 
 
 def load_eps_revisions_panel(prices_index: pd.DatetimeIndex, lookback_days: int = 20) -> pd.DataFrame:

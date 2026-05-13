@@ -245,6 +245,14 @@ SIGNAL_DESCRIPTIONS = {
     "short_volume_ratio_14d": ("Short volume 14d ratio", "FINRA Reg SHO short-vol/total-vol, 14d avg."),
     "si_true_dtc": ("Short interest days-to-cover", "NASDAQ true SI ÷ avg daily share volume."),
     "eps_revision_4w": ("EPS revision % 4w (overlay)", "% change in NTM forward EPS over trailing 20 trading days. Forward-only — accumulating since estimates ingestion started; null for early dates."),
+    # Options signals (in composite once data accumulates)
+    "iv_rank_1y": ("IV rank 1y", "30-day ATM IV as percentile within own trailing 252d range. High = vol expectations elevated (often marks crowded positioning / event risk)."),
+    "iv_term_slope": ("IV term slope", "Front-month IV − 3m IV. Positive (backwardation) = near-term stress > structural; negative (contango) = calm. Backwardation often marks contrarian buy zones."),
+    "skew_25d": ("25Δ skew", "IV(25Δ put) − IV(25Δ call). Positive = puts more expensive (fear/hedging demand); negative = calls more expensive (complacency/euphoria)."),
+    "pc_volume_ratio": ("Put/call vol ratio", "Total put volume / total call volume. High = bearish positioning (often contrarian-bullish at extremes)."),
+    "iv_30d": ("IV30 (overlay)", "30-day ATM implied vol. Raw level for context."),
+    "iv_3m": ("IV3m (overlay)", "3-month ATM implied vol. Raw level for context."),
+    "options_vol_vs_20d": ("Options vol vs 20d (overlay)", "Today's total options volume / 20d rolling avg. >2x is unusual activity."),
     "hf_count_13f": ("HF count 13F (overlay)", "# of curated HFs holding the name."),
     "hf_top_concentration": ("HF top-5 concentration (overlay)", "Top-5 HFs' $ as % of total HF $ in name."),
     "hf_count_change_4q": ("HF count Δ4q (overlay)", "Q/Q change in HF holders."),
@@ -274,8 +282,8 @@ def render_summary_table(df: pd.DataFrame, title: str, subtitle: str = "",
                 <td class="num temp {tcls}">{fmt(r.get('temperature'))}</td>
                 <td class="num {chg_class}">{chg_str}</td>
                 <td class=num>{fmt(r.get('score_positioning'))}</td>
-                <td class=num>{fmt(r.get('score_valuation'))}</td>
                 <td class=num>{fmt(r.get('score_technical'))}</td>
+                <td class=num>{fmt(r.get('score_options'))}</td>
                 <td class="num conv">{fmt(r.get('conviction'))}</td>
                 <td class="num anom">{fmt(r.get('anomaly_count'), places=0)}</td>
                 <td class=flagcol>{late}{wash}{ern}</td>
@@ -294,8 +302,8 @@ def render_summary_table(df: pd.DataFrame, title: str, subtitle: str = "",
                     <th class=num title="Composite 0-100. High=hot/late (contrarian-bearish). Low=cold/washed (contrarian-bullish)">Temp</th>
                     <th class=num title="7-day change in temperature">7d Δ</th>
                     <th class=num title="Positioning bucket">Pos</th>
-                    <th class=num title="Valuation bucket">Val</th>
-                    <th class=num title="Technical bucket">Tech</th>
+                    <th class=num title="Technical / price-revealed sentiment">Tech</th>
+                    <th class=num title="Options sentiment bucket (IV rank, skew, term slope, P/C)">Opt</th>
                     <th class=num title="Conviction (bucket agreement)">Conv</th>
                     <th class=num title="# signals at 90th+ %ile vs cluster peers">Anom</th>
                     <th title="🔥 late · ❄️ wash · 📅 earnings within 14d">Flags</th>
@@ -498,6 +506,7 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
         <div class=drilldown-stats>
             <div class=stat><span class=stat-label>Pos</span><span class="stat-val {temp_class(snap_row.get('score_positioning'))}">{fmt(snap_row.get('score_positioning'))}</span></div>
             <div class=stat><span class=stat-label>Tech</span><span class="stat-val {temp_class(snap_row.get('score_technical'))}">{fmt(snap_row.get('score_technical'))}</span></div>
+            <div class=stat><span class=stat-label>Opt</span><span class="stat-val {temp_class(snap_row.get('score_options'))}">{fmt(snap_row.get('score_options'))}</span></div>
             <div class=stat><span class=stat-label>Conv</span><span class=stat-val>{fmt(snap_row.get('conviction'))}</span></div>
             <div class=stat><span class=stat-label>Anom</span><span class=stat-val>{fmt(snap_row.get('anomaly_count'), 0)}</span></div>
             <div class=stat-spark>{spark_svg}</div>
@@ -636,11 +645,12 @@ def render_glossary() -> str:
 </div>
 
 <div class=gloss-card>
-<h4>Bucket scores (Pos / Tech)</h4>
+<h4>Bucket scores (Pos / Tech / Opt)</h4>
 <p>Each 0–100, average of underlying signals (each signal a percentile vs own history & cluster peers).</p>
 <ul>
-<li><b>Pos</b> — Positioning (insider Form 4, FINRA short volume, NASDAQ true SI days-to-cover)</li>
-<li><b>Tech</b> — Technical/momentum: sentiment expressed via price action (returns, RSI, distance from 200d MA, % from 52w high)</li>
+<li><b>Pos</b> — Positioning: insider Form 4, FINRA short volume, NASDAQ true SI days-to-cover</li>
+<li><b>Tech</b> — Sentiment via price action: returns, RSI, distance from 200d MA, % from 52w high</li>
+<li><b>Opt</b> — Options sentiment: IV rank, 25Δ skew, term structure slope, P/C ratio (live institutional positioning via options markets)</li>
 </ul>
 <p><b>NTM P/E</b> (price ÷ forward consensus EPS) is shown on per-ticker drill-downs as overlay context only — <b>NOT</b> in the composite. Tool measures sentiment / positioning only; valuation is fundamental analysis done separately. <b>No TTM multiples are used</b> — only NTM (forward) per design choice.</p>
 </div>
@@ -754,8 +764,8 @@ def main(asof: str | None = None):
             "temp": float(r["temperature"]) if pd.notna(r["temperature"]) else None,
             "chg7d": float(r["temp_7d_chg"]) if pd.notna(r.get("temp_7d_chg")) else None,
             "pos": float(r["score_positioning"]) if pd.notna(r.get("score_positioning")) else None,
-            "val": float(r["score_valuation"]) if pd.notna(r.get("score_valuation")) else None,
             "tech": float(r["score_technical"]) if pd.notna(r.get("score_technical")) else None,
+            "opt": float(r["score_options"]) if pd.notna(r.get("score_options")) else None,
             "conv": float(r["conviction"]) if pd.notna(r.get("conviction")) else None,
             "anom": int(r["anomaly_count"]) if pd.notna(r.get("anomaly_count")) else None,
             "late": bool(r.get("flag_late_signal") == 1),
@@ -1036,7 +1046,7 @@ tr:hover td {{ background: #f8fafc; }}
 .drilldown-temp .temp-big {{ font-size: 2.75rem; font-weight: 700; line-height: 1; font-family: 'JetBrains Mono', monospace; }}
 .drilldown-temp .temp-sub {{ font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }}
 .tag-earnings {{ display: inline-block; background: #fef3c7; color: #92400e; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-top: 0.4rem; }}
-.drilldown-stats {{ display: grid; grid-template-columns: repeat(4, 1fr) auto; gap: 0.625rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); align-items: center; }}
+.drilldown-stats {{ display: grid; grid-template-columns: repeat(5, 1fr) auto; gap: 0.625rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); align-items: center; }}
 .chart-card {{ background: #f8fafc; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; }}
 .chart-card-label {{ font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 500; }}
 .spark-6m {{ display: block; width: 100%; max-width: 700px; height: auto; }}
@@ -1160,8 +1170,8 @@ tr:hover td {{ background: #f8fafc; }}
 <th class=num data-sort=temp>Temp</th>
 <th class=num data-sort=chg7d>7d Δ</th>
 <th class=num data-sort=pos>Pos</th>
-<th class=num data-sort=val>Val</th>
 <th class=num data-sort=tech>Tech</th>
+<th class=num data-sort=opt>Opt</th>
 <th class=num data-sort=conv>Conv</th>
 <th class=num data-sort=anom>Anom</th>
 <th class=num data-sort=mcap_b title="Market cap ($B)">$B</th>
@@ -1257,8 +1267,8 @@ function renderAllNames() {{
       <td class="num temp ${{tempCls(r.temp)}}">${{fmt(r.temp, 1)}}</td>
       <td class="num ${{r.chg7d > 0 ? 'chg-up' : r.chg7d < 0 ? 'chg-down' : ''}}">${{r.chg7d == null ? '—' : (r.chg7d >= 0 ? '+' : '') + r.chg7d.toFixed(1)}}</td>
       <td class=num>${{fmt(r.pos, 1)}}</td>
-      <td class=num>${{fmt(r.val, 1)}}</td>
       <td class=num>${{fmt(r.tech, 1)}}</td>
+      <td class=num>${{fmt(r.opt, 1)}}</td>
       <td class="num conv">${{fmt(r.conv, 1)}}</td>
       <td class="num anom">${{r.anom == null ? '—' : r.anom}}</td>
       <td class=num>${{r.mcap_b == null ? '—' : '$' + r.mcap_b.toFixed(1)}}</td>

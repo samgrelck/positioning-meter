@@ -18,17 +18,25 @@ import pandas as pd
 
 
 def _dual_pct(pct_self: pd.DataFrame, pct_peer: pd.DataFrame, w_self: float, w_peer: float) -> pd.DataFrame:
-    """Combine pct_self and pct_peer. If pct_peer is NaN (no cluster), fall
-    back to pct_self only."""
+    """Blend pct_self and pct_peer. Fall back to whichever is available when
+    one is missing (NaN). Common cases:
+      - mature signal with cluster peers: both present -> blended
+      - signal with no cluster mapping: pct_self only
+      - young signal (few days of history): pct_peer only (cross-section works)
+    """
+    if (pct_self is None or pct_self.empty) and (pct_peer is None or pct_peer.empty):
+        return pct_self or pd.DataFrame()
     if pct_self is None or pct_self.empty:
-        return pct_self
+        return pct_peer
     if pct_peer is None or pct_peer.empty:
         return pct_self
     pct_peer = pct_peer.reindex_like(pct_self)
+    has_self = pct_self.notna()
     has_peer = pct_peer.notna()
+    both = has_self & has_peer
     blended = pct_self * w_self + pct_peer * w_peer
-    fallback = pct_self  # pct_self only when peer missing
-    return blended.where(has_peer, fallback)
+    # Where both present: blended. Where only one: that one. Where neither: NaN.
+    return blended.where(both, pct_self.where(has_self, pct_peer))
 
 
 def assemble_buckets(

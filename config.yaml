@@ -42,13 +42,16 @@ composite:
   # V1.5: valuation excluded (overlay-only).
   # V1.6 (tools/tune_weights.py grid search): positioning dominates.
   #   At 50/50: IC -0.020, spread -2.09%
-  #   At 70/30: IC -0.026, spread -2.64%  <-- chosen
-  #   At 90/10: IC -0.027 (literal optimum, but risks overfit)
-  # 0.7/0.3 = positioning-dominant, technical-meaningful, near-optimal.
+  #   At 70/30: IC -0.026, spread -2.64%  <-- pos+tech only
+  # V1.7 (with options): weights will be retuned via tools/tune_weights.py
+  # once options data accumulates (yfinance forward, or Polygon backfill).
+  # Until then, options bucket weight 0 — it's computed and shown on
+  # drill-downs but doesn't enter composite. Once we have 60+ days of options
+  # snapshots, re-run weight tuning across all three buckets.
   bucket_weights:
-    positioning: 0.70
-    technical: 0.30
-    options: 0.00   # placeholder for Phase 5
+    positioning: 0.60
+    technical: 0.25
+    options: 0.15   # placeholder — will increase as data accumulates
     flows: 0.00     # placeholder
     valuation: 0.00  # excluded — V1.5
   dual_percentile_weights:

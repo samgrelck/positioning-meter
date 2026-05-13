@@ -3,7 +3,7 @@
 > Single source of truth for current state. Updated after each milestone.
 > Sister docs: `DESIGN.md` (architecture), `QUESTIONS.md` (decisions/caveats), `GITHUB_SETUP.md` (publishing), `data/backtest_report.md` (latest backtest).
 
-**Last updated:** 2026-05-10 — **V1.6: positioning-weighted composite (0.7/0.3) + dashboard QoL upgrades**
+**Last updated:** 2026-05-12 — **V1.7: options bucket online (yfinance forward-only — Polygon Advanced ready for historical backfill)**
 
 ---
 
@@ -42,7 +42,8 @@ The composite now reads PURELY sentiment + positioning. Names that look "hot" in
 | V1.4 | HF concentration → overlay; only `si_true_dtc` kept | −0.020 | −0.021 | 56% | 56% |
 | V1.4 + min2 | Require ≥2 buckets present | −0.019 | −0.022 | 56% | 56% |
 | V1.5 | Valuation → overlay (sentiment/positioning only) | −0.020 | −0.020 | 55% | 56% |
-| **V1.6** | **Re-weight composite via grid search: pos 0.7 / tech 0.3** | **−0.020** | **−0.026** | **55%** | **56%** |
+| V1.6 | Re-weight composite via grid search: pos 0.7 / tech 0.3 | −0.020 | −0.026 | 55% | 56% |
+| **V1.7** | **+Options bucket (IV rank, skew, term slope, P/C) — yfinance forward-only; backtest requires Polygon Advanced historical** | TBD | TBD | TBD | TBD |
 
 ## Data ingestion status
 
@@ -58,17 +59,19 @@ The composite now reads PURELY sentiment + positioning. Names that look "hot" in
 | **Earnings calendar** | **yfinance** | **per-ticker next earnings** | **growing** | **✅** |
 | **ETF AUM** | **yfinance totalAssets** | **forward-only daily snapshots** | **growing** | **✅** |
 | **Analyst actions** | **yfinance upgrades_downgrades** | **rolling 12m** | **growing** | **✅** |
-| Options | (deferred — Polygon $200/mo tier) | — | — | ⏳ |
+| Options (live snapshot) | yfinance options chains | Forward-only daily, 355 names | 355 | ✅ accumulating |
+| Options (historical) | Polygon Options Advanced ($199-299/mo) | Pending subscription | — | ⏳ ready to fire |
 
 ## V1.5 final composite signals
 
-**In composite (contrarian, "hot=late") — sentiment + positioning only:**
+**In composite (V1.7) — sentiment + positioning + options:**
 
 | Bucket | Weight | Signals | Best individual IC |
 |---|---|---|---|
-| Technical (sentiment via price) | 0.50 | ret_1m, ret_3m, ret_6m, dist_200ma, rsi_14, pct_from_52w_high | ret_3m IC −0.038 @ 3m |
-| Positioning | 0.50 | insider_net_90d_signed, short_volume_ratio_14d, si_true_dtc | **si_true_dtc IC −0.064 @ 3m** |
-| ~~Valuation~~ | 0.00 | (overlay only — see below) | excluded V1.5 |
+| Positioning | 0.60 | insider_net_90d_signed, short_volume_ratio_14d, si_true_dtc | **si_true_dtc IC −0.064 @ 3m** |
+| Technical (sentiment via price) | 0.25 | ret_1m, ret_3m, ret_6m, dist_200ma, rsi_14, pct_from_52w_high | ret_3m IC −0.038 @ 3m |
+| **Options (new V1.7)** | **0.15** | **iv_rank_1y, iv_term_slope, skew_25d, pc_volume_ratio** | **Pending historical backfill** |
+| ~~Valuation~~ | 0.00 | (overlay only) | excluded V1.5 |
 
 **Overlay only (computed but excluded from composite):**
 

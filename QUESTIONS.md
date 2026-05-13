@@ -7,18 +7,17 @@ Append-only — when resolved, mark with ✅ and a brief note rather than deleti
 
 ## Decisions still to make
 
-### Polygon Options Advanced subscription (V1.7 — next major step)
-- **Status:** infrastructure built and waiting. yfinance forward-only is accumulating today (355 names ingested for 2026-05-12).
-- **What's pending:**
-    1. Subscribe to Polygon Options Advanced (~$199-299/mo) — see comparison in earlier discussion
-    2. Configure S3 credentials for flat-files: `POLYGON_S3_KEY`, `POLYGON_S3_SECRET` env vars
-    3. Fill in flat-file ingestion logic in `setup/16_ingest_options_polygon.py` (boto3 + parsing) — currently stubbed with NotImplementedError
-    4. Run historical backfill (~2-5 days wall-clock for 10y × 366 names via flat files)
-    5. Re-run `setup/06_compute_signals.py` + backtest + dashboard render
-    6. Re-tune bucket weights via `tools/tune_weights.py` (now with 3 buckets)
-    7. Downgrade to Polygon Options Developer ($79-99/mo) once backfill complete
-- **Expected IC improvement:** −0.026 (V1.6 pos+tech) → estimated −0.035 to −0.045 (V1.7 with options). Pending verification.
-- **Backup the DB before downgrading:** `cp data/positioning.db ~/iCloud/positioning_backup_$(date +%F).db`
+### ~~Polygon Options subscription~~  ✅ RESOLVED — staying on yfinance forward-only
+- **Decision:** do NOT subscribe to Polygon Options.
+- **Reasons (in order):**
+    1. **Sam doesn't qualify for non-professional rates.** Polygon's declaration disqualifies anyone "registered with a securities exchange, association or regulatory body" (FINRA registration triggers this) or "engaged as an investment advisor" (Truist Wealth's business). Risk of false declaration = backdated fees + account suspension.
+    2. **Professional rate is $1,999/mo (Options Business)** — overkill for a personal research tool.
+    3. **FactSet export to personal computer violates Truist data policy.** Not viable.
+    4. Alternative vendors (AlphaVantage, brokerage APIs) have the same non-pro/pro distinctions.
+- **What we keep:** yfinance forward-only daily snapshot. 3 of 4 composite options signals work today via cross-sectional ranking; 4th (IV rank) starts populating after 20 days.
+- **What we lose:** multi-year backtest of options signals (no 2018 vol-mageddon, 2020 COVID coverage). Cannot empirically tune the options bucket weight via grid search — staying at 0.15 placeholder.
+- **Infrastructure preserved for future:** `setup/16_ingest_options_polygon.py` is stubbed with NotImplementedError and ready to fill in if/when institutional data access becomes available (e.g. future employer or CBOE Datashop one-time purchase under personal-use licensing).
+- **Possible future angle:** CBOE Datashop sells historical EOD options summary files on a pay-per-file basis, sometimes under more permissive personal-use licensing than streaming SIP data. Worth a one-paragraph email inquiry if backtest history becomes important later. Not pursued now.
 
 ### ~~EDGAR 13F deferred~~  ✅ RESOLVED — implemented V1.2
 - 40-fund curated list, 1,475 filings, 174k holdings rows. CUSIP→ticker mapping at 97% coverage.

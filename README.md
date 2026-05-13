@@ -23,14 +23,15 @@ Measures how **crowded, hot, and stretched** each name is via the positioning bu
 
 366 TMT names, market cap ≥ $1.5B, drawn from sister `theme_detector` project. Theme_detector clusters serve as peer groups for cross-sectional percentile ranking.
 
-## Backtest results (V1.5)
+## Backtest results
 
-- **Composite IC −0.020** at 3-month forward (Spearman)
-- **Decile spread −2.09%** (top minus bottom decile mean fwd return)
-- **Bottom decile hit rate 56%** (positive forward return when temperature is low)
-- Strongest individual signal: `si_true_dtc` (NASDAQ days-to-cover) IC −0.064 at 3m
+**Latest backtested version (V1.6, positioning + technical buckets):**
+- Composite IC **−0.026** at 3-month forward (Spearman)
+- Decile spread **−2.64%** (top minus bottom decile mean fwd return)
+- Bottom decile hit rate **56%** (positive forward return when temperature is low)
+- Strongest individual signal: `si_true_dtc` (NASDAQ days-to-cover) IC **−0.064** at 3m
 
-V1.5 dropped valuation from composite (still computed as overlay) — composite quality maintained while scope sharpened to sentiment/positioning only.
+**V1.7 adds an options bucket** (IV rank, 25Δ skew, term slope, P/C ratio) via yfinance forward-only accumulation. Options signals contribute to today's live composite via cross-sectional ranking but cannot be backtested without paid historical options data (see Limitations).
 
 See `data/backtest_report.md` for full per-signal metrics.
 
@@ -104,9 +105,9 @@ positioning_meter/
 
 ## Limitations & deferred items
 
-- **Options bucket** — not implemented (would require Polygon Options $200/mo). 4 signals would augment positioning bucket.
+- **Options backtest** — not possible without paid historical data. Author doesn't qualify for non-professional rates due to FINRA registration + Truist Wealth employment; professional rate ($1,999/mo Polygon Options Business) not justified for personal research; FactSet export to personal computer violates employer policy. **Decision:** stay on yfinance forward-only accumulation. 3 of 4 composite options signals work today via cross-sectional ranking; IV rank populates after 20+ days. Infrastructure for paid historical (`setup/16_ingest_options_polygon.py`) is stubbed and ready if/when institutional access becomes available.
 - **EPS revisions historical** — FactSet has it but no bulk export; live snapshot only.
-- **ETF flows historical** — paid data needed; forward-only without it.
+- **ETF flows historical** — paid data needed; forward-only via yfinance.
 - **NASDAQ true SI** — only NASDAQ-listed names (~65% of universe).
 - **13F** — 45-day reporting lag, long-only blind spot.
 - **Pre-2018 short volume** — FINRA CDN doesn't host it.

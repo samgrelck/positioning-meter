@@ -3,9 +3,63 @@
 > Single source of truth for current state. Updated after each milestone.
 > Sister docs: `DESIGN.md` (architecture), `QUESTIONS.md` (decisions/caveats), `GITHUB_SETUP.md` (publishing), `data/backtest_report.md` (latest backtest).
 
-**Last updated:** 2026-05-12 — **V1.7: options bucket online (yfinance forward-only — Polygon Advanced ready for historical backfill)**
+**Last updated:** 2026-05-12 — **V1.7 final: options bucket online via yfinance forward-only. Decision made to NOT pursue paid historical options (data licensing constraints — see §"Data licensing decision" below).**
 
 ---
+
+## ✅ System status: fully operational
+
+As of 2026-05-12, the tool is **end-to-end functional and ready for daily use**:
+
+- 358 names have composite temperature today
+- 326 names have all 3 buckets (Pos + Tech + Opt) — full V1.7 signal
+- 32 names have Pos + Tech only (no listed options or thin chains)
+- 4 names triggered 🔥 Late flag, 2 triggered ❄️ Washout, 48 have 📅 Earnings ≤14d
+- Dashboard at `data/dashboard.html` + `docs/index.html` (5.5 MB, 358 drilldowns)
+- All code committed and pushed to GitHub
+
+## Data licensing decision (V1.7 final — why we're staying on yfinance for options)
+
+After investigating paid options data, **the decision is: stay with yfinance forward-only accumulation.** Rationale:
+
+| Path | Why we ruled it out |
+|---|---|
+| Polygon Options Non-Pro (~$80-200/mo) | Sam doesn't qualify — FINRA registration + Truist employment trigger the "engaged as investment advisor" + "registered with regulatory body" disqualifiers. Risk of backdated fees / account suspension if declared falsely. |
+| Polygon Options Business (Professional) | $1,999/mo — overkill for a personal research tool. |
+| FactSet export to personal computer | Violates Truist data policy. Not an option. |
+| Alternative vendors (AlphaVantage, etc.) | Same non-pro/pro distinctions. Same disqualifier. |
+| Brokerage APIs (IBKR, Tradier) | Same professional/non-pro declarations as a customer. Same disqualifier. |
+| CBOE Datashop one-time historical | Possible — historical EOD files sometimes sold under personal-use licensing. **Open for follow-up email inquiry**, but not pursued now. |
+
+**Result:** yfinance ingestion runs daily, accumulating forward-only history.
+
+### What this means concretely
+
+**What works today (3 of 4 options signals via cross-sectional ranking):**
+| Options signal | Status today | Status at 6 months |
+|---|---|---|
+| 25Δ skew | ✅ working (pct_peer) | ✅ working (pct_self + pct_peer) |
+| Term slope (IV30 − IV3m) | ✅ working (pct_peer) | ✅ working (pct_self + pct_peer) |
+| P/C volume ratio | ✅ working (pct_peer) | ✅ working (pct_self + pct_peer) |
+| IV rank (vs 1y history) | ⏳ null (needs 20+ days own history) | ✅ working (~1y window) |
+
+**What we permanently lose without paid historical:**
+- Multi-year backtest of options signals vs forward returns (no 2018 vol-mageddon, no 2020 COVID)
+- Empirical IC measurement for options bucket
+- Empirical weight tuning for options weight (currently a 0.15 placeholder, not backtest-derived)
+
+**For interview / portfolio framing:** the architecture is the impressive part — math layer, providers, ingestion, signal compute, dashboard integration all built. Frame the data limitation honestly as a compliance-driven engineering constraint ("upgradeable to historical options via institutional feed at a future employer"). Strong, defensible.
+
+### What changes if you ever DO get historical options data
+
+If you change firms, get an academic affiliation, or buy CBOE Datashop personal-use files:
+1. Fill in the boto3 / parsing logic in `setup/16_ingest_options_polygon.py` (currently stubbed)
+2. Run historical backfill (~2-5 days wall-clock)
+3. Re-run `setup/06_compute_signals.py` + `setup/07_run_backtest.py`
+4. Re-tune bucket weights via `tools/tune_weights.py` (now with 3 buckets including options)
+5. Re-render dashboard
+
+The infrastructure is **fully ready** — only the data is gated.
 
 ## At a glance
 
@@ -43,7 +97,9 @@ The composite now reads PURELY sentiment + positioning. Names that look "hot" in
 | V1.4 + min2 | Require ≥2 buckets present | −0.019 | −0.022 | 56% | 56% |
 | V1.5 | Valuation → overlay (sentiment/positioning only) | −0.020 | −0.020 | 55% | 56% |
 | V1.6 | Re-weight composite via grid search: pos 0.7 / tech 0.3 | −0.020 | −0.026 | 55% | 56% |
-| **V1.7** | **+Options bucket (IV rank, skew, term slope, P/C) — yfinance forward-only; backtest requires Polygon Advanced historical** | TBD | TBD | TBD | TBD |
+| **V1.7** | **+Options bucket: yfinance forward-only (no historical backtest — see "Data licensing decision" above)** | n/a* | n/a* | n/a* | n/a* |
+
+*Options bucket can't be backtested without paid historical data, which we've decided not to pursue. Composite IC numbers are unchanged from V1.6 (−0.020 / −0.026) for the positioning+technical signals; options contributes to today's live composite via cross-sectional ranking but doesn't have a backtested IC.
 
 ## Data ingestion status
 

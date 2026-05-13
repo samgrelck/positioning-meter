@@ -7,6 +7,21 @@
 
 ---
 
+## 🚀 Daily use
+
+```bash
+cd ~/Documents/AI\ workflows/positioning_meter && ./tools/deploy.sh
+```
+
+That one command: recomputes signals → re-runs backtest → renders dashboard → copies to `docs/` → commits + pushes to GitHub. ~1 minute total. GitHub Pages updates ~30 seconds after push.
+
+To open the local dashboard without pushing:
+```bash
+open ~/Documents/AI\ workflows/positioning_meter/data/dashboard.html
+```
+
+To refresh source data first (before deploy.sh), see [README.md → Refreshing source data](README.md#refreshing-source-data-run-as-often-as-you-want--daily-weekly-etc).
+
 ## ✅ System status: fully operational
 
 As of 2026-05-12, the tool is **end-to-end functional and ready for daily use**:

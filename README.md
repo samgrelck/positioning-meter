@@ -2,7 +2,23 @@
 
 A daily-run **sentiment / positioning** analysis tool for individual TMT stocks.
 
-Measures how **crowded, hot, and stretched** each name is via the positioning bucket (insider, short interest) and technical/price-sentiment bucket (momentum, RSI, distance from MAs). Valuation is shown as overlay context but excluded from the composite — fundamental analysis is done separately.
+Measures how **crowded, hot, and stretched** each name is via the positioning bucket (insider, short interest, 13F), technical bucket (sentiment via price action: momentum, RSI, distance from MAs), and options bucket (IV rank, skew, term slope, P/C ratio). Valuation is shown as overlay context but excluded from the composite — fundamental analysis is done separately.
+
+---
+
+## 🚀 Quick reference
+
+```bash
+# Refresh dashboard from current DB state, push to GitHub:
+cd ~/Documents/AI\ workflows/positioning_meter && ./tools/deploy.sh
+
+# Or just view the local dashboard:
+open ~/Documents/AI\ workflows/positioning_meter/data/dashboard.html
+```
+
+See ["Daily use"](#-daily-use--the-one-command-you-need) below for the full workflow including data refresh.
+
+---
 
 ## What it shows
 
@@ -35,7 +51,53 @@ Measures how **crowded, hot, and stretched** each name is via the positioning bu
 
 See `data/backtest_report.md` for full per-signal metrics.
 
-## Setup
+## 🚀 Daily use — the one command you need
+
+After initial setup is complete, refreshing the dashboard is a single command:
+
+```bash
+cd ~/Documents/AI\ workflows/positioning_meter
+./tools/deploy.sh
+```
+
+That does the full daily refresh:
+1. Recomputes all signals from current DB state
+2. Re-runs the backtest
+3. Renders `data/dashboard.html`
+4. Copies to `docs/index.html` for GitHub Pages
+5. Commits and pushes to GitHub
+6. GitHub Pages rebuilds in ~30 seconds — your dashboard is live at `https://samgrelck.github.io/positioning-meter/`
+
+**Note:** `deploy.sh` does not run the data ingestion scripts (which can take minutes to hours). To pull new daily data first, see the "Refreshing source data" section below.
+
+```bash
+# Open the dashboard locally (no GitHub push needed)
+open data/dashboard.html
+```
+
+## Refreshing source data (run as often as you want — daily, weekly, etc.)
+
+```bash
+# Most-frequent (lightweight, run daily):
+python3 setup/02_ingest_prices.py         # ~4 min — Polygon prices
+python3 setup/13_ingest_estimates.py      # ~35 min — Yahoo estimates + analyst actions
+python3 setup/14_ingest_etf_flows.py      # ~2 min — ETF AUM snapshot
+python3 setup/15_ingest_options_yahoo.py  # ~18 min — Yahoo options chains
+python3 setup/05_ingest_insider.py        # ~10 min — openinsider Form 4 (only need fresh if Form 4s file daily)
+
+# Less-frequent (run weekly or as needed):
+python3 setup/04_ingest_short_volume.py   # ~10 min — FINRA daily (biweekly settlement source)
+python3 setup/09_ingest_nasdaq_si.py      # ~16 min — NASDAQ true SI (biweekly cadence)
+python3 setup/03_ingest_financials.py     # ~3 min — Polygon financials (quarterly cadence)
+
+# Quarterly only:
+python3 setup/12_ingest_13f.py            # ~25 min — EDGAR 13F (filings come out 45d after quarter-end)
+
+# After any data refresh, run deploy.sh to recompute + render + push:
+./tools/deploy.sh
+```
+
+## Setup (one-time)
 
 ```bash
 pip install -r requirements.txt

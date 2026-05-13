@@ -37,11 +37,14 @@ def pct_self_panel(values: pd.DataFrame, window_days: int) -> pd.DataFrame:
     return values.apply(lambda s: rolling_percentile_rank(s, window_days))
 
 
-def pct_peer_panel(values: pd.DataFrame, ticker_to_cluster: dict[str, str]) -> pd.DataFrame:
+def pct_peer_panel(values: pd.DataFrame, ticker_to_cluster: dict[str, str],
+                    min_cluster_size: int = 3) -> pd.DataFrame:
     """Cross-sectional percentile rank within cluster peers at each date.
 
-    ticker_to_cluster: dict mapping each column ticker to its cluster id.
-    Columns with no cluster mapping get NaN.
+    For tickers in clusters with fewer than `min_cluster_size` members
+    (including orphans with no cluster mapping), falls back to ranking
+    against the FULL universe present at that date. This ensures every
+    ticker with a raw value gets a peer percentile.
     """
     if values.empty:
         return values
@@ -52,11 +55,23 @@ def pct_peer_panel(values: pd.DataFrame, ticker_to_cluster: dict[str, str]) -> p
             cluster_groups.setdefault(cid, []).append(t)
 
     out = pd.DataFrame(np.nan, index=values.index, columns=values.columns, dtype=float)
+
+    # Track which tickers got a cluster-based rank
+    cluster_ranked = set()
     for cid, tickers in cluster_groups.items():
-        if len(tickers) < 3:
-            continue  # too small to rank meaningfully
+        if len(tickers) < min_cluster_size:
+            continue
         sub = values[tickers]
-        # Per-row rank, scaled to 0..100 (NaN-safe)
         ranked = sub.rank(axis=1, pct=True, na_option="keep") * 100.0
         out.loc[:, tickers] = ranked
+        cluster_ranked.update(tickers)
+
+    # Fallback: rank everyone NOT yet ranked against the full universe panel
+    fallback_tickers = [c for c in values.columns if c not in cluster_ranked]
+    if fallback_tickers:
+        # Rank within full panel — gives each fallback ticker its rank vs all
+        # other names with a value on that date
+        full_rank = values.rank(axis=1, pct=True, na_option="keep") * 100.0
+        out.loc[:, fallback_tickers] = full_rank.loc[:, fallback_tickers]
+
     return out

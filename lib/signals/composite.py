@@ -44,10 +44,17 @@ def assemble_buckets(
     per_signal_pct_peer: dict[str, pd.DataFrame],
     signal_to_bucket: dict[str, str],
     dual_pct_weights: dict[str, float],
+    signal_weights: dict[str, float] | None = None,
 ) -> dict[str, pd.DataFrame]:
-    """Average dual-percentile signals within each bucket."""
+    """Weighted average of dual-percentile signals within each bucket.
+
+    `signal_weights`: optional dict of {signal_name: weight}. If provided,
+    signals are weighted by the given values (typically computed from IC).
+    If None, signals are equal-weighted within each bucket.
+    """
     w_self = dual_pct_weights.get("pct_self", 0.5)
     w_peer = dual_pct_weights.get("pct_peer", 0.5)
+    signal_weights = signal_weights or {}
 
     bucket_to_signals: dict[str, list[str]] = {}
     for sig, bkt in signal_to_bucket.items():
@@ -55,19 +62,27 @@ def assemble_buckets(
 
     bucket_panels: dict[str, pd.DataFrame] = {}
     for bkt, sigs in bucket_to_signals.items():
-        dual_panels = []
+        # Compute per-signal dual percentile + collect weights
+        sig_panels = []
+        weights = []
         for s in sigs:
             ps = per_signal_pct_self.get(s)
             if ps is None or ps.empty:
                 continue
             pp = per_signal_pct_peer.get(s)
-            dual_panels.append(_dual_pct(ps, pp, w_self, w_peer))
-        if not dual_panels:
+            sig_panels.append(_dual_pct(ps, pp, w_self, w_peer))
+            weights.append(signal_weights.get(s, 1.0))
+        if not sig_panels:
             continue
-        # Average across signals (NaN-safe)
-        stack = pd.concat([p.stack() for p in dual_panels], axis=1)
-        bucket_score = stack.mean(axis=1).unstack()
-        bucket_panels[bkt] = bucket_score
+        # Weighted average across signals, handling NaN per-cell
+        w_arr = pd.Series(weights, index=range(len(sig_panels)))
+        stack = pd.concat([p.stack(future_stack=True) for p in sig_panels], axis=1)
+        # weighted mean: sum(w_i × x_i where x_i present) / sum(w_i where x_i present)
+        present = stack.notna()
+        weighted = (stack.fillna(0).values * w_arr.values).sum(axis=1)
+        weight_sum = (present.values * w_arr.values).sum(axis=1)
+        bucket_score_long = pd.Series(weighted / pd.Series(weight_sum).replace(0, float('nan')).values, index=stack.index)
+        bucket_panels[bkt] = bucket_score_long.unstack()
     return bucket_panels
 
 

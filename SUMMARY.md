@@ -3,7 +3,7 @@
 > Single source of truth for current state. Updated after each milestone.
 > Sister docs: `DESIGN.md` (architecture), `QUESTIONS.md` (decisions/caveats), `GITHUB_SETUP.md` (publishing), `data/backtest_report.md` (latest backtest).
 
-**Last updated:** 2026-05-12 — **V1.7 final: options bucket online via yfinance forward-only. Decision made to NOT pursue paid historical options (data licensing constraints — see §"Data licensing decision" below).**
+**Last updated:** 2026-05-12 — **V1.8: IC-weighted within-bucket signals (composite IC improved −0.026 → −0.033) + score-breakdown transparency in drilldown.**
 
 ---
 
@@ -85,7 +85,7 @@ The infrastructure is **fully ready** — only the data is gated.
 |---|---|
 | Universe | 366 TMT names, mcap ≥ $1.5B, drawn from theme_detector |
 | Backtest horizon | 10y for most signals; 6.5y for short volume; 1y for true SI |
-| Composite output | working — IC **−0.026**, decile spread −2.64%, bot decile hit 56% at 3m fwd (V1.6 — re-weighted to 0.7 pos / 0.3 tech via grid search) |
+| Composite output | working — IC **−0.033**, decile spread **−3.00%**, bot decile hit **57%** at 3m fwd (V1.8 — IC-weighted within-bucket signals) |
 | Composite scope | **sentiment / positioning only** — valuation is overlay (V1.5 design choice, not backtest-forced) |
 | Dashboard | `data/dashboard.html` (also at `docs/index.html` for GitHub Pages) — interactive search, filter, drill-down, CSV export, glossary |
 | Backtest report | `data/backtest_report.md` |
@@ -115,7 +115,8 @@ The composite now reads PURELY sentiment + positioning. Names that look "hot" in
 | V1.4 + min2 | Require ≥2 buckets present | −0.019 | −0.022 | 56% | 56% |
 | V1.5 | Valuation → overlay (sentiment/positioning only) | −0.020 | −0.020 | 55% | 56% |
 | V1.6 | Re-weight composite via grid search: pos 0.7 / tech 0.3 | −0.020 | −0.026 | 55% | 56% |
-| **V1.7** | **+Options bucket: yfinance forward-only (no historical backtest — see "Data licensing decision" above)** | n/a* | n/a* | n/a* | n/a* |
+| V1.7 | +Options bucket: yfinance forward-only (no historical backtest — see "Data licensing decision" above) | n/a* | n/a* | n/a* | n/a* |
+| **V1.8** | **Within-bucket signals IC-weighted via tools/tune_signal_weights.py** | **−0.023** | **−0.033** | **57%** | **57%** |
 
 *Options bucket can't be backtested without paid historical data, which we've decided not to pursue. Composite IC numbers are unchanged from V1.6 (−0.020 / −0.026) for the positioning+technical signals; options contributes to today's live composite via cross-sectional ranking but doesn't have a backtested IC.
 

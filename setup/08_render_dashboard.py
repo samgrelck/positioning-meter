@@ -368,7 +368,8 @@ def _render_6m_chart(series: list) -> str:
 
 
 def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
-                     sparkline, chart_series, notes_row, sector_groups, cluster_mates, sector_mates) -> str:
+                     sparkline, chart_series, notes_row, sector_groups, cluster_mates, sector_mates,
+                     bucket_weights=None, signal_weights=None, signal_to_bucket=None) -> str:
     t = snap_row["ticker"]
     name = snap_row.get("name") or t
 
@@ -418,6 +419,7 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
             """)
     sig_table = f"""
         <h4>📊 Signal-by-signal breakdown</h4>
+        <p class=hint>Each signal is ranked vs (a) its own 5y history and (b) cluster peers. The two are blended 50/50 to form a per-signal score, which is then weighted by the signal-weight column to form the bucket score.</p>
         <table class=signals>
             <thead><tr><th>Signal</th><th>Bucket</th><th class=num>Raw value</th>
                 <th class=num title="Percentile vs own 5-year history">%ile (self)</th>
@@ -425,6 +427,128 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
             <tbody>{''.join(sig_rows) if sig_rows else '<tr><td colspan=5 class=empty>(no signals)</td></tr>'}</tbody>
         </table>
     """
+
+    # === Score-breakdown card: explicit formula + contributions ===
+    breakdown_html = ""
+    if bucket_weights and signal_to_bucket:
+        pos = snap_row.get("score_positioning")
+        tech = snap_row.get("score_technical")
+        opt = snap_row.get("score_options")
+        temp = snap_row.get("temperature")
+
+        # Active buckets (those present today)
+        buckets_present = []
+        if pd.notna(pos):
+            buckets_present.append(("positioning", pos, bucket_weights.get("positioning", 0)))
+        if pd.notna(tech):
+            buckets_present.append(("technical", tech, bucket_weights.get("technical", 0)))
+        if pd.notna(opt):
+            buckets_present.append(("options", opt, bucket_weights.get("options", 0)))
+
+        # Effective weights after renormalization for missing buckets
+        total_w = sum(w for _, _, w in buckets_present) or 1.0
+        bucket_rows = []
+        for bkt, score, raw_w in buckets_present:
+            eff_w = raw_w / total_w
+            contribution = score * eff_w
+            bucket_rows.append(f"""
+                <tr>
+                    <td><b>{bkt.capitalize()}</b></td>
+                    <td class="num mono">{score:.1f}</td>
+                    <td class="num mono">{raw_w:.2f}</td>
+                    <td class="num mono">{eff_w:.3f}</td>
+                    <td class="num mono">{contribution:.2f}</td>
+                </tr>
+            """)
+
+        # Per-signal breakdown within each bucket
+        per_signal_html = ""
+        if signal_weights and not sig_long.empty:
+            for bkt in [b for b, _, _ in buckets_present]:
+                bkt_sigs = sig_long[sig_long["bucket"] == bkt].copy()
+                if bkt_sigs.empty:
+                    continue
+                # Each signal's contribution to its bucket = signal_weight × dual_pct
+                rows = []
+                total_sw = 0
+                weighted_total = 0
+                for _, sr in bkt_sigs.iterrows():
+                    sn = sr["signal_name"]
+                    ps = sr.get("pct_self")
+                    pp = sr.get("pct_peer")
+                    # Recreate dual percentile (50/50 by default) — use whichever is present
+                    if pd.notna(ps) and pd.notna(pp):
+                        dual = 0.5 * ps + 0.5 * pp
+                    elif pd.notna(ps):
+                        dual = ps
+                    elif pd.notna(pp):
+                        dual = pp
+                    else:
+                        dual = None
+                    sw = signal_weights.get(sn, 1.0)
+                    if dual is None:
+                        continue
+                    total_sw += sw
+                    weighted_total += sw * dual
+                    label = SIGNAL_DESCRIPTIONS.get(sn, (sn, ""))[0]
+                    rows.append(f"""
+                        <tr>
+                            <td>{label}</td>
+                            <td class="num mono">{dual:.1f}</td>
+                            <td class="num mono">{sw:.3f}</td>
+                            <td class="num mono">{(sw * dual):.2f}</td>
+                        </tr>
+                    """)
+                if rows and total_sw > 0:
+                    final_bkt = weighted_total / total_sw
+                    rows.append(f"""
+                        <tr style="border-top:2px solid var(--border); font-weight:600">
+                            <td>Σ (bucket score)</td>
+                            <td class="num mono">{final_bkt:.1f}</td>
+                            <td class="num mono">{total_sw:.3f}</td>
+                            <td class="num mono">{weighted_total:.2f}</td>
+                        </tr>
+                    """)
+                    per_signal_html += f"""
+                        <details>
+                        <summary><b>{bkt.capitalize()} bucket — signal weights from IC</b></summary>
+                        <table class=signals>
+                            <thead><tr>
+                                <th>Signal</th>
+                                <th class=num>Dual %ile</th>
+                                <th class=num title="Weight from |IC| at 3m fwd, normalized within bucket">Sig weight</th>
+                                <th class=num>Contribution</th>
+                            </tr></thead>
+                            <tbody>{''.join(rows)}</tbody>
+                        </table>
+                        </details>
+                    """
+
+        breakdown_html = f"""
+        <div class=card>
+            <h4>🧮 How {t}'s Temperature = {fmt(temp)} was calculated</h4>
+            <p class=hint><b>Step 1:</b> Each underlying signal is scored vs own history and cluster peers (50/50 blend) → percentile 0–100. <b>Step 2:</b> Within each bucket, signals are averaged using IC-based weights (stronger contrarian signals dominate). <b>Step 3:</b> Buckets are combined using configured bucket weights, renormalized for any missing buckets.</p>
+            <table class=signals>
+                <thead><tr>
+                    <th>Bucket</th>
+                    <th class=num title="Bucket score 0-100">Score</th>
+                    <th class=num title="Raw weight from config.yaml">Raw weight</th>
+                    <th class=num title="Effective weight after renormalizing for missing buckets">Eff. weight</th>
+                    <th class=num title="Score × eff. weight">Contribution</th>
+                </tr></thead>
+                <tbody>{''.join(bucket_rows)}
+                    <tr style="border-top:2px solid var(--border); font-weight:600">
+                        <td><b>Temperature</b></td>
+                        <td class="num mono"><b>{fmt(temp)}</b></td>
+                        <td class=num>—</td>
+                        <td class="num mono">1.000</td>
+                        <td class="num mono"><b>{fmt(temp)}</b></td>
+                    </tr>
+                </tbody>
+            </table>
+            {per_signal_html}
+        </div>
+        """
 
     est_html = ""
     if est_row is not None and isinstance(est_row, pd.Series):
@@ -515,6 +639,7 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
             <div class=chart-card-label>📈 Temperature, last 6 months (red zone ≥70 = hot, green zone ≤30 = cold)</div>
             {_render_6m_chart(chart_series)}
         </div>
+        {breakdown_html}
         {sig_table}
         {est_html}
         {act_html}
@@ -641,7 +766,7 @@ def render_glossary() -> str:
 
 <div class=gloss-card>
 <h4>Temperature (0–100)</h4>
-<p>The composite "how hot/late" score. Each signal is ranked vs its own trailing 5y history (0=coldest ever, 100=hottest ever) AND vs cluster peers, then blended 50/50. Bucket scores average their signals; composite averages buckets. <b>High temperature ⇒ stretched positioning + price-revealed sentiment, historically associated with negative forward returns at extremes (V1.5 backtest IC −0.020 at 3m fwd, bot decile hit 56%).</b></p>
+<p>The composite "how hot/late" score. Each signal is ranked vs its own trailing 5y history (0=coldest ever, 100=hottest ever) AND vs cluster peers, then blended 50/50. Bucket scores average their signals; composite is a <b>weighted average</b> of buckets (positioning 0.60, technical 0.25, options 0.15 — weights renormalize when a bucket is missing). <b>High temperature ⇒ stretched positioning + price-revealed sentiment + options sentiment, historically associated with negative forward returns at extremes (V1.6 backtest IC −0.026 at 3m fwd, bot decile hit 56%; options bucket added in V1.7 but not yet backtested).</b></p>
 </div>
 
 <div class=gloss-card>
@@ -657,7 +782,7 @@ def render_glossary() -> str:
 
 <div class=gloss-card>
 <h4>Conviction (0–100)</h4>
-<p>How much the buckets <i>agree</i>. High conviction = all buckets pointing same way (all hot, or all cold). Low = mixed signals (e.g., expensive valuation but cold technicals — value-trap risk).</p>
+<p>How much the buckets <i>agree</i>. High conviction = all buckets pointing same way (all hot, or all cold). Low = mixed signals (e.g., extreme positioning but cold technicals, or hot options sentiment with washed-out positioning).</p>
 </div>
 
 <div class=gloss-card>
@@ -685,8 +810,8 @@ def render_glossary() -> str:
 </div>
 
 <div class=gloss-card>
-<h4>Backtest validation (V1.5)</h4>
-<p>Composite IC −0.020 at 3-month forward (Spearman). Bottom-decile temperature → 56% positive forward return; top-decile → 54% negative. Strongest individual signal: <code>si_true_dtc</code> (NASDAQ days-to-cover) IC −0.064 at 3m. V1.5 dropped valuation from composite without meaningful loss vs V1.4 (was −0.022).</p>
+<h4>Backtest validation (V1.6 positioning+technical only)</h4>
+<p>Composite IC −0.026 at 3-month forward (Spearman). Bottom-decile temperature → 56% positive forward return; top-decile → 54% negative. Strongest individual signal: <code>si_true_dtc</code> (NASDAQ days-to-cover) IC −0.064 at 3m. <b>Options bucket added V1.7 (yfinance forward-only) — not yet backtested due to no historical options data; live cross-sectional ranking working today.</b></p>
 </div>
 
 </div>
@@ -738,6 +863,24 @@ def main(asof: str | None = None):
     earn_by_ticker = data["earnings"].set_index("ticker") if not data["earnings"].empty else pd.DataFrame()
     notes_by_ticker = data["notes"].set_index("ticker") if not data["notes"].empty else pd.DataFrame()
 
+    # Load weights once for the breakdown card
+    from lib.config import load as load_cfg
+    cfg_for_weights = load_cfg()
+    bucket_weights_for_dash = cfg_for_weights["composite"]["bucket_weights"]
+    sw_path = project_path("data/signal_weights.json")
+    signal_weights_for_dash = {}
+    if sw_path.exists():
+        try:
+            signal_weights_for_dash = json.loads(sw_path.read_text()).get("weights", {})
+        except Exception:
+            pass
+    # Re-import SIGNAL_TO_BUCKET from compute_signals
+    import importlib.util as _imp
+    _spec = _imp.spec_from_file_location("_cs", project_path("setup/06_compute_signals.py"))
+    _mod = _imp.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    signal_to_bucket_for_dash = _mod.SIGNAL_TO_BUCKET
+
     drilldowns = []
     for _, row in snap.iterrows():
         t = row["ticker"]
@@ -752,7 +895,10 @@ def main(asof: str | None = None):
         cluster_mates = [x for x in cluster_to_tickers.get(cluster_id, []) if x != t][:12] if cluster_id else []
         sector_mates = {sg: sector_groups[sg]["tickers"] for sg in ticker_to_sectors.get(t, [])}
         drilldowns.append(render_drilldown(
-            row, sig_t, est_t, earn_t, actions_t, spark, chart_series, notes_t, sector_groups, cluster_mates, sector_mates
+            row, sig_t, est_t, earn_t, actions_t, spark, chart_series, notes_t, sector_groups, cluster_mates, sector_mates,
+            bucket_weights=bucket_weights_for_dash,
+            signal_weights=signal_weights_for_dash,
+            signal_to_bucket=signal_to_bucket_for_dash,
         ))
 
     # All-names data for JS-rendered table
@@ -1113,7 +1259,7 @@ tr:hover td {{ background: #f8fafc; }}
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.5</b> (sentiment + positioning only) · Backtest IC <b>−0.020</b> at 3m fwd · Bot decile hit <b>56%</b></div>
+<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.7</b> (Pos 0.60 / Tech 0.25 / Opt 0.15) · Backtest IC <b>−0.026</b> at 3m fwd (Pos+Tech only) · Bot decile hit <b>56%</b></div>
 </div>
 </header>
 
@@ -1153,7 +1299,7 @@ tr:hover td {{ background: #f8fafc; }}
 
 <div class="tab-content active" id=tab-overview>
 <div class=panels-grid>
-{render_summary_table(hottest, "🔥 Hottest 25", "Highest composite temperature — most extreme positioning + momentum + valuation.")}
+{render_summary_table(hottest, "🔥 Hottest 25", "Highest composite temperature — most extreme positioning + price-revealed sentiment + options sentiment.")}
 {render_summary_table(coldest, "❄️ Coldest 25", "Lowest composite temperature — most washed out names.")}
 </div>
 </div>
@@ -1223,7 +1369,7 @@ tr:hover td {{ background: #f8fafc; }}
 <p><b>Signals</b>: 18 daily signals — 13 in composite, 5 overlay-only. Inclusion driven by backtest IC sign (positive IC = trend, excluded from contrarian composite).</p>
 <p><b>Dual percentile</b>: each signal ranked vs (a) own 5y trailing history and (b) cluster peers cross-section. Bucket scores average those.</p>
 <p><b>Composite</b>: weighted average of bucket scores. Reweighted when buckets are missing. Min 2 buckets required for a temperature reading.</p>
-<p><b>Backtest</b>: 10y daily panel. IC = Spearman correlation between signal percentile and forward return. V1.5 composite IC −0.020 at 3m fwd, decile spread −2.09%, bot decile hit 56%. (V1.4 with valuation included was −0.022 — statistically equivalent.) See data/backtest_report.md.</p>
+<p><b>Backtest</b>: 10y daily panel. IC = Spearman correlation between signal percentile and forward return. V1.6 composite (Pos+Tech, 0.7/0.3 weights via grid search) IC −0.026 at 3m fwd, decile spread −2.64%, bot decile hit 56%. V1.7 added options bucket but options have no backtest history (yfinance forward-only). Within-bucket signal weights are computed empirically from IC (see <code>tools/tune_signal_weights.py</code>). See data/backtest_report.md.</p>
 <p><b>Limitations</b>: options bucket not implemented (Polygon $200/mo would unlock). ETF flows forward-only. EPS revisions live snapshot only. NASDAQ true SI covers only NASDAQ-listed names (~65% of universe). 13F has 45-day reporting lag and is long-only.</p>
 </div>
 </details>
@@ -1240,10 +1386,6 @@ const TOTAL_NAMES = {len(snap)};
 function showTab(id) {{
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === id));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + id));
-  if (id === 'allnames' && !window.__allNamesRendered) {{
-    renderAllNames();
-    window.__allNamesRendered = true;
-  }}
 }}
 
 // === All-names table render ===
@@ -1477,8 +1619,10 @@ function exportNotes() {{
   URL.revokeObjectURL(url);
 }}
 
-// Init notes + watchlist after DOM is ready
+// Init notes + watchlist + render All Names table after DOM is ready.
+// Render All Names eagerly so search works from any tab.
 document.addEventListener('DOMContentLoaded', () => {{
+  renderAllNames();
   loadNotes();
   applyWatchedStyling();
 }});

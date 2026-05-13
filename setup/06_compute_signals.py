@@ -167,10 +167,22 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
 
     # Assemble bucket scores + composite
     write_status({"phase": "assemble"})
+    # Load within-bucket signal weights (computed by tools/tune_signal_weights.py).
+    # If not present, signals are equal-weighted within each bucket.
+    signal_weights = None
+    sw_path = project_path("data/signal_weights.json")
+    if sw_path.exists():
+        try:
+            signal_weights = json.loads(sw_path.read_text()).get("weights", {})
+            print(f"Loaded {len(signal_weights)} per-signal weights from {sw_path.name}")
+        except Exception as e:
+            print(f"WARN: failed to load signal_weights.json: {e}; using equal weights")
+
     print("Assembling buckets...")
     bucket_panels = assemble_buckets(
         pct_self, pct_peer, SIGNAL_TO_BUCKET,
         cfg["composite"]["dual_percentile_weights"],
+        signal_weights=signal_weights,
     )
     print(f"Buckets computed: {list(bucket_panels.keys())}")
     print("Assembling composite...")

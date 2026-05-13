@@ -112,6 +112,10 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
     # Build cluster mapping for pct_peer
     ticker_to_cluster = dict(zip(universe["ticker"], universe["cluster_id"].fillna("")))
     ticker_to_cluster = {t: c for t, c in ticker_to_cluster.items() if c}
+    # Multi-cluster peer membership (e.g. AMD is in CPUs + GPUs + AI semis)
+    from lib.peers import ticker_to_clusters as _ttc, cluster_members as _cm
+    ticker_to_clusters_multi = _ttc()
+    cluster_members_map = _cm()
 
     write_status({"phase": "compute_signals"})
     print("Computing technical signals...")
@@ -163,7 +167,21 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
 
     print("Computing pct_peer...")
     for sig_name, panel in raw_signals.items():
-        pct_peer[sig_name] = pct_peer_panel(panel, ticker_to_cluster)
+        # V1.8: pct_peer uses UNIVERSE-WIDE ranking only (blend_universe=1.0).
+        # Why: cluster-relative ranking suppresses cluster-wide moves (e.g. if
+        # all CPU names are crowded, ranking within CPUs gives each name ~50th
+        # percentile, hiding the cluster-wide elevation). Universe-rank picks
+        # up "this name is hot vs the rest of TMT today." Combined with
+        # pct_self (vs own history), this correctly flags both:
+        #   - Name-specific elevation (via pct_self)
+        #   - Sector-wide rotation/crowding (via universe pct_peer when sector
+        #     stands out from rest of TMT)
+        pct_peer[sig_name] = pct_peer_panel(
+            panel, ticker_to_cluster,
+            ticker_to_clusters=ticker_to_clusters_multi,
+            cluster_members=cluster_members_map,
+            blend_universe=1.0,  # 1.0 = universe only; 0.0 = cluster only
+        )
 
     # Assemble bucket scores + composite
     write_status({"phase": "assemble"})

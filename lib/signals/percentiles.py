@@ -38,40 +38,72 @@ def pct_self_panel(values: pd.DataFrame, window_days: int) -> pd.DataFrame:
 
 
 def pct_peer_panel(values: pd.DataFrame, ticker_to_cluster: dict[str, str],
-                    min_cluster_size: int = 3) -> pd.DataFrame:
-    """Cross-sectional percentile rank within cluster peers at each date.
+                    min_cluster_size: int = 3, blend_universe: float = 0.5,
+                    ticker_to_clusters: dict[str, list[str]] | None = None,
+                    cluster_members: dict[str, list[str]] | None = None) -> pd.DataFrame:
+    """Cross-sectional percentile rank — blend of cluster-rank + universe-rank.
 
-    For tickers in clusters with fewer than `min_cluster_size` members
-    (including orphans with no cluster mapping), falls back to ranking
-    against the FULL universe present at that date. This ensures every
-    ticker with a raw value gets a peer percentile.
+    Two-stage methodology:
+      1. Cluster rank: each ticker ranked vs the UNION of members across all
+         clusters it belongs to (so AMD ranks vs CPU+GPU+AI-semi peers, not
+         just one). If a ticker's peer set is < min_cluster_size, only the
+         universe rank applies for that ticker.
+      2. Universe rank: each ticker ranked vs the full panel.
+
+    Final pct_peer = (1-blend_universe) × cluster_rank + blend_universe × universe_rank.
+
+    blend_universe controls the mix. 0.0 = cluster only, 1.0 = universe only,
+    0.5 = balanced. Universe rank provides statistical stability; cluster
+    rank provides peer-specificity. Tunable per design choice.
+
+    Falls back to universe rank only when cluster peer set is too small.
+
+    Args (backward compatible):
+      ticker_to_cluster: legacy single-cluster mapping (still accepted)
+      ticker_to_clusters: optional multi-cluster mapping (preferred)
+      cluster_members: optional dict cluster_id -> list of members
     """
     if values.empty:
         return values
 
-    cluster_groups: dict[str, list[str]] = {}
-    for t, cid in ticker_to_cluster.items():
-        if cid and t in values.columns:
-            cluster_groups.setdefault(cid, []).append(t)
+    # Universe rank baseline — every ticker against everyone with a value
+    universe_rank = values.rank(axis=1, pct=True, na_option="keep") * 100.0
 
-    out = pd.DataFrame(np.nan, index=values.index, columns=values.columns, dtype=float)
+    # Build per-ticker peer set
+    if ticker_to_clusters is None:
+        # Derive from single-cluster mapping (each ticker has 1 cluster)
+        ticker_to_clusters = {t: [c] for t, c in ticker_to_cluster.items() if c}
+    if cluster_members is None:
+        # Derive from single-cluster mapping: each cluster's members
+        cluster_members = {}
+        for t, c in ticker_to_cluster.items():
+            if c:
+                cluster_members.setdefault(c, []).append(t)
 
-    # Track which tickers got a cluster-based rank
-    cluster_ranked = set()
-    for cid, tickers in cluster_groups.items():
-        if len(tickers) < min_cluster_size:
+    # Build cluster rank by union-of-clusters peer set
+    cluster_rank = pd.DataFrame(np.nan, index=values.index, columns=values.columns, dtype=float)
+    # Group tickers by their peer-set fingerprint to avoid redundant compute
+    peer_sets: dict[frozenset, list[str]] = {}
+    for ticker in values.columns:
+        cids = ticker_to_clusters.get(ticker, [])
+        peers: set = set()
+        for cid in cids:
+            peers.update(cluster_members.get(cid, []))
+        if len(peers) < min_cluster_size:
+            continue  # Will only get universe rank
+        peer_sets.setdefault(frozenset(peers), []).append(ticker)
+
+    for peer_set_frozen, tickers in peer_sets.items():
+        peer_cols = [t for t in peer_set_frozen if t in values.columns]
+        if len(peer_cols) < min_cluster_size:
             continue
-        sub = values[tickers]
+        sub = values[peer_cols]
         ranked = sub.rank(axis=1, pct=True, na_option="keep") * 100.0
-        out.loc[:, tickers] = ranked
-        cluster_ranked.update(tickers)
+        for t in tickers:
+            if t in ranked.columns:
+                cluster_rank[t] = ranked[t]
 
-    # Fallback: rank everyone NOT yet ranked against the full universe panel
-    fallback_tickers = [c for c in values.columns if c not in cluster_ranked]
-    if fallback_tickers:
-        # Rank within full panel — gives each fallback ticker its rank vs all
-        # other names with a value on that date
-        full_rank = values.rank(axis=1, pct=True, na_option="keep") * 100.0
-        out.loc[:, fallback_tickers] = full_rank.loc[:, fallback_tickers]
-
-    return out
+    # Blend cluster + universe, falling back to universe only when cluster absent
+    has_cluster = cluster_rank.notna()
+    blended = (1 - blend_universe) * cluster_rank + blend_universe * universe_rank
+    return blended.where(has_cluster, universe_rank)

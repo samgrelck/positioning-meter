@@ -735,7 +735,7 @@ def render_backtest_card(results: list) -> str:
         bars = _render_decile_bars(r.get("decile_means", {}))
         comp_rows.append(f"""
             <tr>
-                <td><b>Composite (V1.6)</b></td>
+                <td><b>Composite (V1.8)</b></td>
                 <td>{r['horizon']}</td>
                 <td class='num mono {ic_cls}'>{ic:+.4f}</td>
                 <td class=num>{r['top_hit_rate']:.1%}</td>
@@ -746,7 +746,7 @@ def render_backtest_card(results: list) -> str:
 
     return f"""
     <div class="panel" id="backtest-panel">
-        <h3>📈 Backtest validation (V1.6)</h3>
+        <h3>📈 Backtest validation (V1.8)</h3>
         <p class=hint>Information Coefficient (Spearman) per signal vs forward returns. <b class=chg-down>Negative IC</b> = contrarian (high signal → negative forward return). Bars show decile-mean forward returns: 10 bars left-to-right = bottom-decile (cold) → top-decile (hot). For a working contrarian signal you want bars sloping <span class=chg-down>green-down on the left</span> and <span class=chg-up>red-up on the right</span>.</p>
         <div class=table-wrap>
         <table class=signals>
@@ -766,7 +766,7 @@ def render_glossary() -> str:
 
 <div class=gloss-card>
 <h4>Temperature (0–100)</h4>
-<p>The composite "how hot/late" score. Each signal is ranked vs its own trailing 5y history (0=coldest ever, 100=hottest ever) AND vs cluster peers, then blended 50/50. Bucket scores average their signals; composite is a <b>weighted average</b> of buckets (positioning 0.60, technical 0.25, options 0.15 — weights renormalize when a bucket is missing). <b>High temperature ⇒ stretched positioning + price-revealed sentiment + options sentiment, historically associated with negative forward returns at extremes (V1.6 backtest IC −0.026 at 3m fwd, bot decile hit 56%; options bucket added in V1.7 but not yet backtested).</b></p>
+<p>The composite "how hot/late" score. Each signal is ranked vs (a) its own trailing 5y history (<code>pct_self</code>) and (b) the full TMT universe at the same date (<code>pct_peer</code>), then blended 50/50. Bucket scores are weighted by IC (stronger contrarian signals get more weight). Composite = <b>weighted average</b> of buckets (positioning 0.60, technical 0.25, options 0.15 — weights renormalize when a bucket is missing). <b>High temperature ⇒ stretched positioning + price-revealed sentiment + options sentiment, historically associated with negative forward returns at extremes (V1.8 backtest IC −0.034 at 3m fwd, bot decile hit 58%; options bucket added in V1.7 but not yet backtested).</b></p>
 </div>
 
 <div class=gloss-card>
@@ -810,8 +810,8 @@ def render_glossary() -> str:
 </div>
 
 <div class=gloss-card>
-<h4>Backtest validation (V1.6 positioning+technical only)</h4>
-<p>Composite IC −0.026 at 3-month forward (Spearman). Bottom-decile temperature → 56% positive forward return; top-decile → 54% negative. Strongest individual signal: <code>si_true_dtc</code> (NASDAQ days-to-cover) IC −0.064 at 3m. <b>Options bucket added V1.7 (yfinance forward-only) — not yet backtested due to no historical options data; live cross-sectional ranking working today.</b></p>
+<h4>Backtest validation (V1.8 positioning+technical only)</h4>
+<p>Composite IC <b>−0.034</b> at 3-month forward (Spearman). Bottom-decile temperature → 58% positive forward return; top-decile → 54% negative. Strongest individual signal: <code>si_true_dtc</code> (NASDAQ days-to-cover) IC <b>−0.080</b> at 3m. <b>Options bucket added V1.7 (yfinance forward-only) — not yet backtested due to no historical options data; live cross-sectional ranking working today.</b> Pct_peer now uses universe-wide ranking (cluster-relative was suppressing cluster-wide moves like a hot CPU cluster).</p>
 </div>
 
 </div>
@@ -1259,7 +1259,7 @@ tr:hover td {{ background: #f8fafc; }}
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.7</b> (Pos 0.60 / Tech 0.25 / Opt 0.15) · Backtest IC <b>−0.026</b> at 3m fwd (Pos+Tech only) · Bot decile hit <b>56%</b></div>
+<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.8</b> (Pos 0.60 / Tech 0.25 / Opt 0.15, IC-weighted signals, universe-rank pct_peer) · Backtest IC <b>−0.034</b> at 3m fwd · Bot decile hit <b>57%</b></div>
 </div>
 </header>
 
@@ -1369,7 +1369,7 @@ tr:hover td {{ background: #f8fafc; }}
 <p><b>Signals</b>: 18 daily signals — 13 in composite, 5 overlay-only. Inclusion driven by backtest IC sign (positive IC = trend, excluded from contrarian composite).</p>
 <p><b>Dual percentile</b>: each signal ranked vs (a) own 5y trailing history and (b) cluster peers cross-section. Bucket scores average those.</p>
 <p><b>Composite</b>: weighted average of bucket scores. Reweighted when buckets are missing. Min 2 buckets required for a temperature reading.</p>
-<p><b>Backtest</b>: 10y daily panel. IC = Spearman correlation between signal percentile and forward return. V1.6 composite (Pos+Tech, 0.7/0.3 weights via grid search) IC −0.026 at 3m fwd, decile spread −2.64%, bot decile hit 56%. V1.7 added options bucket but options have no backtest history (yfinance forward-only). Within-bucket signal weights are computed empirically from IC (see <code>tools/tune_signal_weights.py</code>). See data/backtest_report.md.</p>
+<p><b>Backtest</b>: 10y daily panel. IC = Spearman correlation between signal percentile and forward return. V1.8 composite (Pos+Tech, weighted 0.6/0.25 with options 0.15 placeholder) IC <b>−0.034</b> at 3m fwd, decile spread <b>−3.6%</b>, bot decile hit <b>58%</b>. V1.7 added options bucket but options have no backtest history (yfinance forward-only). Within-bucket signal weights computed empirically from IC (<code>tools/tune_signal_weights.py</code>). V1.8 changed pct_peer from cluster-relative to universe-wide ranking — cluster-relative was suppressing cluster-wide moves (e.g. when the entire CPU cluster is crowded, ranking within CPUs gave each name ~50th percentile, hiding the cluster-wide elevation). See data/backtest_report.md.</p>
 <p><b>Limitations</b>: options bucket not implemented (Polygon $200/mo would unlock). ETF flows forward-only. EPS revisions live snapshot only. NASDAQ true SI covers only NASDAQ-listed names (~65% of universe). 13F has 45-day reporting lag and is long-only.</p>
 </div>
 </details>

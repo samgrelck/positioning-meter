@@ -20,19 +20,74 @@ def load_clusters() -> dict:
 
 
 @lru_cache(maxsize=1)
-def ticker_to_cluster() -> dict[str, str]:
-    """Map ticker -> cluster_id, excluding outliers."""
+def ticker_to_clusters() -> dict[str, list[str]]:
+    """Map ticker -> list of cluster_ids (a ticker can belong to multiple
+    clusters, e.g. AMD is both a CPU and a GPU/AI-semi name)."""
     clusters = load_clusters()
-    mapping: dict[str, str] = {}
+    memberships: dict[str, list[str]] = {}
     for cluster_id, info in clusters.items():
         outliers = set(info.get("outliers", []))
         members = info.get("members") or info.get("tickers") or []
         for t in members:
             if t in outliers:
                 continue
-            # First cluster wins if a ticker appears in multiple
-            mapping.setdefault(t, cluster_id)
+            memberships.setdefault(t, []).append(cluster_id)
+    return memberships
+
+
+@lru_cache(maxsize=1)
+def ticker_to_cluster() -> dict[str, str]:
+    """Map ticker -> single representative cluster (used for dashboard
+    drilldown 'cluster mates' display).
+
+    Priority when in multiple clusters:
+      1. Curated clusters (curated_*) over auto-generated (cluster_NN)
+      2. Within same priority class, larger cluster wins (more peer-specific
+         when the curated taxonomy is intentional, e.g. AMD belongs to
+         curated_ai_semiconductors which has 13 members vs curated_cpus 4)
+    """
+    clusters = load_clusters()
+    memberships = ticker_to_clusters()
+
+    def cluster_size(cid):
+        info = clusters.get(cid, {})
+        members = info.get("members") or info.get("tickers") or []
+        return len(members)
+
+    def priority(cid):
+        is_curated = cid.startswith("curated_")
+        # Negative size so min picks LARGER curated cluster
+        return (0 if is_curated else 1, -cluster_size(cid))
+
+    mapping: dict[str, str] = {}
+    for t, cids in memberships.items():
+        mapping[t] = min(cids, key=priority)
     return mapping
+
+
+@lru_cache(maxsize=1)
+def cluster_members() -> dict[str, list[str]]:
+    """Map cluster_id -> list of member tickers (excluding outliers)."""
+    clusters = load_clusters()
+    out: dict[str, list[str]] = {}
+    for cluster_id, info in clusters.items():
+        outliers = set(info.get("outliers", []))
+        members = info.get("members") or info.get("tickers") or []
+        out[cluster_id] = [t for t in members if t not in outliers]
+    return out
+
+
+def peer_set(ticker: str) -> set[str]:
+    """Union of all cluster members across all clusters this ticker belongs to.
+    Used for percentile-peer ranking — gives a richer peer set than a single
+    cluster, especially for cross-category names like AMD (CPU + GPU + AI semi).
+    """
+    cids = ticker_to_clusters().get(ticker, [])
+    cmems = cluster_members()
+    peers: set[str] = set()
+    for cid in cids:
+        peers.update(cmems.get(cid, []))
+    return peers
 
 
 def peers_of(ticker: str) -> list[str]:

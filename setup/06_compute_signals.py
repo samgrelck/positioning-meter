@@ -165,6 +165,16 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
         window = fast_window if bucket == "options" else slow_window
         pct_self[sig_name] = pct_self_panel(panel, window)
 
+    # V1.10: For TECHNICAL signals only — use pct_self alone, NOT the blend.
+    # Empirical finding: technical signals are contrarian at the OWN-HISTORY
+    # level (pct_self IC negative) but trend-following at the cross-sectional
+    # level (pct_peer IC positive). The 50/50 blend cancels them out.
+    # Positioning + options signals work in BOTH dimensions, keep the blend.
+    TECH_USE_SELF_ONLY = {
+        "ret_1m", "ret_3m", "ret_6m", "dist_200ma", "rsi_14", "pct_from_52w_high",
+        "ret_12m", "rs_vs_qqq_3m", "rs_vs_xlk_3m",
+    }
+
     print("Computing pct_peer...")
     for sig_name, panel in raw_signals.items():
         # V1.8: pct_peer uses UNIVERSE-WIDE ranking only (blend_universe=1.0).
@@ -182,6 +192,13 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
             cluster_members=cluster_members_map,
             blend_universe=1.0,  # 1.0 = universe only; 0.0 = cluster only
         )
+
+    # V1.10: For technical signals, replace pct_peer with pct_self so the
+    # downstream 50/50 blend collapses to pct_self only (drops the trend-
+    # following cross-sectional component).
+    for sig_name in TECH_USE_SELF_ONLY:
+        if sig_name in pct_self and sig_name in pct_peer:
+            pct_peer[sig_name] = pct_self[sig_name]
 
     # Assemble bucket scores + composite
     write_status({"phase": "assemble"})

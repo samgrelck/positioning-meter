@@ -766,7 +766,7 @@ def render_glossary() -> str:
 
 <div class=gloss-card>
 <h4>Temperature (0–100)</h4>
-<p>The composite "how hot/late" score. Each signal is ranked vs (a) its own trailing 5y history (<code>pct_self</code>) and (b) the full TMT universe at the same date (<code>pct_peer</code>, V1.8+), then blended 50/50. Within each bucket, signals are weighted by their backtest IC (stronger contrarian signals dominate; positive-IC trend signals get zero weight). Composite = <b>weighted average of buckets</b>: <b>positioning 0.45 + technical 0.25 + options 0.30</b> (V1.9 weights; renormalize when a bucket is missing). <b>High temperature ⇒ stretched positioning + price-revealed sentiment + options sentiment, historically associated with negative forward returns at extremes (V1.9 backtest IC −0.031 at 3m fwd, bot decile hit 57%; options bucket added in V1.7 but not yet backtested due to forward-only yfinance data).</b></p>
+<p>The composite "how hot/late" score. Each signal is scored as a percentile, then within each bucket signals are weighted by their backtest IC (stronger contrarian signals dominate). Composite = <b>weighted average of buckets</b>: <b>positioning 0.45 + technical 0.25 + options 0.30</b>. Weights renormalize when a bucket is missing.</p><p><b>How percentiles are computed (V1.10):</b> Technical signals use <code>pct_self</code> only (vs own 5y history) — their cross-section component is trend-following and cancels the contrarian own-history signal. Positioning + options signals use 50/50 blend of <code>pct_self</code> and <code>pct_peer</code> (vs full TMT universe). <b>V1.10 backtest IC −0.040 at 3m fwd, bot decile hit 58%. Options bucket added in V1.7 (yfinance forward-only) — no backtest yet.</b></p>
 </div>
 
 <div class=gloss-card>
@@ -1260,7 +1260,7 @@ tr:hover td {{ background: #f8fafc; }}
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.9</b> (Pos 0.45 / Tech 0.25 / Opt 0.30, options signals inverted to contrarian direction) · Backtest IC <b>−0.031</b> at 3m fwd · Bot decile hit <b>57%</b></div>
+<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.10</b> (Pos 0.45 / Tech 0.25 / Opt 0.30; technicals use pct_self only — fixes self/peer cancellation) · Backtest IC <b>−0.040</b> at 3m fwd · Bot decile hit <b>58%</b></div>
 </div>
 </header>
 

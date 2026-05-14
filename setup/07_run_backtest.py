@@ -25,7 +25,7 @@ SIGNALS = [
     # technical (overlay — trend signals)
     "ret_12m", "rs_vs_qqq_3m", "rs_vs_xlk_3m",
     # positioning (composite)
-    "insider_net_90d_signed", "short_volume_ratio_14d", "si_true_dtc",
+    "insider_net_90d_signed", "insider_buying_90d", "short_volume_ratio_14d", "si_true_dtc",
     # positioning (overlay — trend / weak signals)
     "insider_net_90d_abs", "hf_count_13f", "hf_top_concentration", "hf_count_change_4q",
     # V1.5: ttm_pe, ev_sales removed (no TTM multiples used)

@@ -1260,7 +1260,7 @@ tr:hover td {{ background: #f8fafc; }}
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.10</b> (Pos 0.45 / Tech 0.25 / Opt 0.30; technicals use pct_self only — fixes self/peer cancellation) · Backtest IC <b>−0.040</b> at 3m fwd · Bot decile hit <b>58%</b></div>
+<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.11</b> (Pos 0.35 / Tech 0.35 / Opt 0.30; FINRA biweekly SI universe-wide 2018+, 365/366 names with SI history) · Backtest IC <b>−0.034</b> at 3m fwd · Bot decile hit <b>57%</b></div>
 </div>
 </header>
 

@@ -42,11 +42,16 @@ def load_short_volume() -> pd.DataFrame:
     return df.pivot(index="date", columns="ticker", values="sv_ratio")
 
 
-def load_insider_flows(window_days: int = 90) -> pd.DataFrame:
+def load_insider_flows(window_days: int = 90, buying_only: bool = False) -> pd.DataFrame:
     """Per-(ticker, date) rolling-window net insider $ over `window_days`.
 
     Returns DF indexed by date, columns by ticker, values = net $ over the
     trailing window (positive = net buying, negative = net selling).
+
+    If `buying_only=True`, sets all negative (net-selling) daily values to 0
+    before rolling. Result: only counts dollar-amount of net buying days.
+    Used for insider_buying_90d signal where selling is treated as noise
+    (Seyhun, Lakonishok-Lee literature).
     """
     conn = connect()
     df = pd.read_sql_query(
@@ -63,6 +68,9 @@ def load_insider_flows(window_days: int = 90) -> pd.DataFrame:
         return pd.DataFrame()
     # daily sum per ticker
     daily = df.groupby(["date", "ticker"])["value_usd"].sum().unstack(fill_value=0)
+    if buying_only:
+        # Keep only positive (net buying) days; selling days → 0
+        daily = daily.clip(lower=0)
     # reindex to all calendar days then rolling window
     full_idx = pd.date_range(daily.index.min(), daily.index.max(), freq="D")
     daily = daily.reindex(full_idx, fill_value=0)

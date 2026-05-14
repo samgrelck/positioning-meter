@@ -38,6 +38,7 @@ SIGNAL_TO_BUCKET = {
     "pct_from_52w_high": "technical",
     # positioning
     "insider_net_90d_signed": "positioning",
+    "insider_buying_90d": "positioning",  # buying-only — inverted at signal level
     "short_volume_ratio_14d": "positioning",
     "si_true_dtc": "positioning",
     # options — populated as data is ingested (yfinance forward-only or
@@ -97,6 +98,7 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
     closes, volumes = loaders.load_prices()
     fundamentals = loaders.load_fundamentals_q()
     insider_90d = loaders.load_insider_flows(window_days=90)
+    insider_buying_90d = loaders.load_insider_flows(window_days=90, buying_only=True)
     short_vol = loaders.load_short_volume()
     si_true = loaders.load_si_true(closes.index)
     hf_panels = loaders.load_hf_holdings_panels(closes.index)
@@ -141,6 +143,14 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
     # Add EPS revisions overlay (forward-only — null until we accumulate history)
     if not eps_revisions_4w.empty:
         pos_signals["eps_revision_4w"] = eps_revisions_4w
+    # V1.11: insider_buying_90d — buying-only insider net dollars. Per academic
+    # literature (Seyhun, Lakonishok-Lee), insider buying carries signal but
+    # selling is mostly noise (diversification, tax, 10b5-1 plans). Zeroing
+    # the selling days isolates the signal-bearing component.
+    # Inverted (see below) — high buying → COLD in our framework (contrarian-bullish).
+    if not insider_buying_90d.empty:
+        # Reindex calendar -> trading days
+        pos_signals["insider_buying_90d"] = insider_buying_90d.reindex(closes.index, method="ffill")
     # Merge in options signals
     pos_signals.update(options_panels)
 
@@ -164,6 +174,14 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
         bucket = ALL_SIGNALS.get(sig_name, "technical")
         window = fast_window if bucket == "options" else slow_window
         pct_self[sig_name] = pct_self_panel(panel, window)
+
+    # V1.11: Invert raw values for signals where HIGH raw = COLD direction.
+    # insider_buying_90d: high net buying = bullish positioning = washout (COLD).
+    # Same as options signals which were already inverted in load_options_panels.
+    INVERT_RAW = {"insider_buying_90d"}
+    for sig_name in INVERT_RAW:
+        if sig_name in pos_signals and not pos_signals[sig_name].empty:
+            pos_signals[sig_name] = -pos_signals[sig_name]
 
     # V1.10: For TECHNICAL signals only — use pct_self alone, NOT the blend.
     # Empirical finding: technical signals are contrarian at the OWN-HISTORY

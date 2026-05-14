@@ -51,8 +51,12 @@ composite:
   # ratio while giving options meaningful weight.
   # Will refine once options accumulates enough history for backtest tuning.
   bucket_weights:
-    positioning: 0.45
-    technical: 0.25
+    # V1.11: After FINRA SI backfill (8y universe-wide vs old 1y NASDAQ-only),
+    # the si_true_dtc signal IC dropped from -0.103 to -0.010 — out-of-sample
+    # reality check. Grid search now shows pos vs tech roughly balanced
+    # (0.5/0.5 optimum). Updated to balanced pos+tech with options at 0.30.
+    positioning: 0.35
+    technical: 0.35
     options: 0.30
     flows: 0.00     # placeholder
     valuation: 0.00  # excluded — V1.5

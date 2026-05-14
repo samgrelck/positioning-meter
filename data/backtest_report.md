@@ -1,6 +1,6 @@
 # Positioning Meter — Backtest Report
 
-Generated: 2026-05-13 20:18:57.714798
+Generated: 2026-05-13 21:38:05.231954
 
 Universe: 366 TMT names (mcap >= $1.5B)
 
@@ -70,15 +70,24 @@ Forward horizons: ['1w', '1m', '3m']
 | insider_net_90d_signed | pct_peer | 1w | 263,143 | -0.0115 | -0.0002 | 46.75% | 55.94% |
 | insider_net_90d_signed | pct_peer | 1m | 261,052 | -0.0124 | -0.0013 | 44.89% | 59.55% |
 | insider_net_90d_signed | pct_peer | 3m | 255,629 | -0.0039 | 0.0213 | 40.30% | 63.67% |
+| insider_buying_90d | pct_self | 1w | 240,440 | 0.0101 | — | 44.54% | 53.82% |
+| insider_buying_90d | pct_self | 1m | 238,356 | 0.0195 | — | 41.62% | 55.56% |
+| insider_buying_90d | pct_self | 3m | 232,954 | 0.0251 | — | 38.11% | 58.44% |
+| insider_buying_90d | pct_peer | 1w | 263,143 | 0.0010 | 0.0002 | 44.02% | 54.09% |
+| insider_buying_90d | pct_peer | 1m | 261,052 | 0.0396 | -0.0045 | 42.22% | 55.09% |
+| insider_buying_90d | pct_peer | 3m | 255,629 | 0.0921 | 0.0176 | 39.10% | 50.77% |
 | short_volume_ratio_14d | pct_self | 1w | 496,150 | -0.0050 | -0.0023 | 46.56% | 52.98% |
 | short_volume_ratio_14d | pct_self | 1m | 490,495 | -0.0139 | -0.0089 | 45.27% | 55.56% |
 | short_volume_ratio_14d | pct_self | 3m | 475,790 | -0.0247 | -0.0268 | 44.14% | 55.67% |
 | short_volume_ratio_14d | pct_peer | 1w | 585,183 | -0.0109 | -0.0027 | 47.63% | 53.04% |
 | short_volume_ratio_14d | pct_peer | 1m | 579,153 | -0.0225 | -0.0097 | 47.11% | 55.72% |
 | short_volume_ratio_14d | pct_peer | 3m | 563,568 | -0.0297 | -0.0347 | 45.92% | 57.02% |
-| si_true_dtc | pct_peer | 1w | 56,469 | -0.0383 | -0.0161 | 46.96% | 57.02% |
-| si_true_dtc | pct_peer | 1m | 52,656 | -0.0555 | -0.0857 | 42.96% | 62.11% |
-| si_true_dtc | pct_peer | 3m | 42,711 | -0.1034 | -0.2880 | 45.73% | 65.56% |
+| si_true_dtc | pct_self | 1w | 510,928 | -0.0004 | -0.0001 | 46.88% | 52.95% |
+| si_true_dtc | pct_self | 1m | 505,239 | 0.0043 | 0.0050 | 45.46% | 54.18% |
+| si_true_dtc | pct_self | 3m | 490,474 | 0.0028 | 0.0390 | 44.67% | 53.50% |
+| si_true_dtc | pct_peer | 1w | 598,949 | -0.0097 | -0.0034 | 48.18% | 53.64% |
+| si_true_dtc | pct_peer | 1m | 592,893 | -0.0162 | -0.0122 | 47.64% | 55.50% |
+| si_true_dtc | pct_peer | 3m | 577,281 | -0.0234 | -0.0250 | 46.40% | 56.67% |
 | insider_net_90d_abs | pct_self | 1w | 240,440 | 0.0085 | 0.0036 | 45.05% | 55.13% |
 | insider_net_90d_abs | pct_self | 1m | 238,356 | 0.0158 | 0.0191 | 40.47% | 57.29% |
 | insider_net_90d_abs | pct_self | 3m | 232,954 | 0.0126 | 0.0561 | 36.29% | 61.80% |
@@ -108,9 +117,9 @@ Forward horizons: ['1w', '1m', '3m']
 
 | Signal | Horizon | N | IC | Decile spread | Top dec hit | Bot dec hit |
 |---|---|---|---|---|---|---|
-| COMPOSITE_TEMPERATURE | 1w | 555,235 | -0.0155 | -0.0046 | 48.14% | 54.42% |
-| COMPOSITE_TEMPERATURE | 1m | 549,477 | -0.0255 | -0.0163 | 47.83% | 56.91% |
-| COMPOSITE_TEMPERATURE | 3m | 534,580 | -0.0404 | -0.0335 | 47.56% | 58.27% |
+| COMPOSITE_TEMPERATURE | 1w | 568,615 | -0.0178 | -0.0040 | 48.06% | 54.59% |
+| COMPOSITE_TEMPERATURE | 1m | 562,844 | -0.0250 | -0.0139 | 47.76% | 56.78% |
+| COMPOSITE_TEMPERATURE | 3m | 547,895 | -0.0361 | -0.0237 | 47.79% | 57.51% |
 
 ## Interpretation guide
 

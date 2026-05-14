@@ -4,8 +4,9 @@
   "note": "Weights computed from |IC| at given horizon, normalized within bucket. Positive-IC signals (trend-following) get weight 0.",
   "weights": {
     "insider_net_90d_signed": 0.0,
-    "short_volume_ratio_14d": 0.2082020471826092,
-    "si_true_dtc": 0.7917979528173908,
+    "insider_buying_90d": 0.0,
+    "short_volume_ratio_14d": 0.724397573391676,
+    "si_true_dtc": 0.275602426608324,
     "ret_1m": 0.21670904342787364,
     "ret_3m": 0.3570019225092875,
     "ret_6m": 0.0,

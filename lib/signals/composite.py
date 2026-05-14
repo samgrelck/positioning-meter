@@ -179,20 +179,17 @@ def compute_flags(
         return panel.fillna(False).astype(int).where(panel.notna())
 
     flags = {}
-    if pos is not None and tech is not None:
-        # Align indexes
-        idx = tech.index
-        cols = tech.columns
-        pos_a = pos.reindex(index=idx, columns=cols)
-        late = (pos_a >= late_thr) & (tech >= late_thr)
-        wash = (pos_a <= wash_thr) & (tech <= wash_thr)
-        # If valuation IS present (overlay), use it as a tiebreaker confirmation
-        if val is not None:
-            val_a = val.reindex(index=idx, columns=cols)
-            late = late & (val_a.isna() | (val_a >= max(0, late_thr - 10)))
-            wash = wash & (val_a.isna() | (val_a <= wash_thr + 15))
+    # V1.9: late/washout flags are based directly on Temperature, not on
+    # pos+tech AND-conjunctions. Reason: the composite IS already a
+    # weighted aggregate of the buckets; double-filtering on sub-bucket
+    # extremes is redundant and arbitrary.
+    if composite is not None and not composite.empty:
+        late = (composite >= late_thr)
+        wash = (composite <= wash_thr)
         flags["flag_late_signal"] = _to_int(late)
         flags["flag_washout"] = _to_int(wash)
+    # Divergence flag — keeps multi-bucket logic because it's genuinely
+    # measuring divergence BETWEEN buckets (tech extreme but opt not).
     if tech is not None and opt is not None:
         opt_a = opt.reindex(index=tech.index, columns=tech.columns)
         flags["flag_divergence"] = _to_int((tech >= min_tech) & (opt_a <= max_opt))

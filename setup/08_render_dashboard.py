@@ -419,7 +419,7 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
             """)
     sig_table = f"""
         <h4>📊 Signal-by-signal breakdown</h4>
-        <p class=hint>Each signal is ranked vs (a) its own 5y history and (b) cluster peers. The two are blended 50/50 to form a per-signal score, which is then weighted by the signal-weight column to form the bucket score.</p>
+        <p class=hint>Each signal is ranked vs (a) its own 5y history and (b) the full TMT universe today. The two are blended 50/50 to form a per-signal score, which is then weighted by the signal-weight column to form the bucket score.</p>
         <table class=signals>
             <thead><tr><th>Signal</th><th>Bucket</th><th class=num>Raw value</th>
                 <th class=num title="Percentile vs own 5-year history">%ile (self)</th>
@@ -527,7 +527,7 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
         breakdown_html = f"""
         <div class=card>
             <h4>🧮 How {t}'s Temperature = {fmt(temp)} was calculated</h4>
-            <p class=hint><b>Step 1:</b> Each underlying signal is scored vs own history and cluster peers (50/50 blend) → percentile 0–100. <b>Step 2:</b> Within each bucket, signals are averaged using IC-based weights (stronger contrarian signals dominate). <b>Step 3:</b> Buckets are combined using configured bucket weights, renormalized for any missing buckets.</p>
+            <p class=hint><b>Step 1:</b> Each underlying signal is scored vs own history and the full TMT universe today (50/50 blend) → percentile 0–100. <b>Step 2:</b> Within each bucket, signals are averaged using IC-based weights (stronger contrarian signals dominate). <b>Step 3:</b> Buckets are combined using configured bucket weights, renormalized for any missing buckets.</p>
             <table class=signals>
                 <thead><tr>
                     <th>Bucket</th>
@@ -787,7 +787,7 @@ def render_glossary() -> str:
 
 <div class=gloss-card>
 <h4>Anomaly count</h4>
-<p>Number of signals where this name is at the 90th+ percentile vs its cluster peers <i>today</i>. High = stands out from peers across many measures.</p>
+<p>Number of signals where this name is at the 90th+ percentile vs the full TMT universe <i>today</i>. High = stands out across many measures.</p>
 </div>
 
 <div class=gloss-card>

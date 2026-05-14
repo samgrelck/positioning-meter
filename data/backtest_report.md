@@ -1,6 +1,6 @@
 # Positioning Meter — Backtest Report
 
-Generated: 2026-05-13 21:38:05.231954
+Generated: 2026-05-13 22:04:35.122917
 
 Universe: 366 TMT names (mcap >= $1.5B)
 
@@ -82,12 +82,12 @@ Forward horizons: ['1w', '1m', '3m']
 | short_volume_ratio_14d | pct_peer | 1w | 585,183 | -0.0109 | -0.0027 | 47.63% | 53.04% |
 | short_volume_ratio_14d | pct_peer | 1m | 579,153 | -0.0225 | -0.0097 | 47.11% | 55.72% |
 | short_volume_ratio_14d | pct_peer | 3m | 563,568 | -0.0297 | -0.0347 | 45.92% | 57.02% |
-| si_true_dtc | pct_self | 1w | 510,928 | -0.0004 | -0.0001 | 46.88% | 52.95% |
-| si_true_dtc | pct_self | 1m | 505,239 | 0.0043 | 0.0050 | 45.46% | 54.18% |
-| si_true_dtc | pct_self | 3m | 490,474 | 0.0028 | 0.0390 | 44.67% | 53.50% |
-| si_true_dtc | pct_peer | 1w | 598,949 | -0.0097 | -0.0034 | 48.18% | 53.64% |
-| si_true_dtc | pct_peer | 1m | 592,893 | -0.0162 | -0.0122 | 47.64% | 55.50% |
-| si_true_dtc | pct_peer | 3m | 577,281 | -0.0234 | -0.0250 | 46.40% | 56.67% |
+| si_true_dtc | pct_self | 1w | 315,132 | -0.0089 | 0.0003 | 47.56% | 53.02% |
+| si_true_dtc | pct_self | 1m | 309,550 | -0.0125 | 0.0025 | 47.68% | 54.14% |
+| si_true_dtc | pct_self | 3m | 295,017 | -0.0331 | 0.0131 | 47.07% | 56.39% |
+| si_true_dtc | pct_peer | 1w | 403,481 | -0.0146 | -0.0048 | 49.27% | 52.94% |
+| si_true_dtc | pct_peer | 1m | 397,552 | -0.0237 | -0.0183 | 50.21% | 53.86% |
+| si_true_dtc | pct_peer | 3m | 382,195 | -0.0300 | -0.0383 | 49.53% | 53.99% |
 | insider_net_90d_abs | pct_self | 1w | 240,440 | 0.0085 | 0.0036 | 45.05% | 55.13% |
 | insider_net_90d_abs | pct_self | 1m | 238,356 | 0.0158 | 0.0191 | 40.47% | 57.29% |
 | insider_net_90d_abs | pct_self | 3m | 232,954 | 0.0126 | 0.0561 | 36.29% | 61.80% |
@@ -117,9 +117,9 @@ Forward horizons: ['1w', '1m', '3m']
 
 | Signal | Horizon | N | IC | Decile spread | Top dec hit | Bot dec hit |
 |---|---|---|---|---|---|---|
-| COMPOSITE_TEMPERATURE | 1w | 568,615 | -0.0178 | -0.0040 | 48.06% | 54.59% |
-| COMPOSITE_TEMPERATURE | 1m | 562,844 | -0.0250 | -0.0139 | 47.76% | 56.78% |
-| COMPOSITE_TEMPERATURE | 3m | 547,895 | -0.0361 | -0.0237 | 47.79% | 57.51% |
+| COMPOSITE_TEMPERATURE | 1w | 555,352 | -0.0183 | -0.0046 | 48.11% | 54.69% |
+| COMPOSITE_TEMPERATURE | 1m | 549,599 | -0.0259 | -0.0156 | 47.33% | 57.50% |
+| COMPOSITE_TEMPERATURE | 3m | 534,696 | -0.0366 | -0.0301 | 46.93% | 59.15% |
 
 ## Interpretation guide
 

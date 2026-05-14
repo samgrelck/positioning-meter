@@ -5,8 +5,8 @@
   "weights": {
     "insider_net_90d_signed": 0.0,
     "insider_buying_90d": 0.0,
-    "short_volume_ratio_14d": 0.724397573391676,
-    "si_true_dtc": 0.275602426608324,
+    "short_volume_ratio_14d": 0.4627398368096417,
+    "si_true_dtc": 0.5372601631903583,
     "ret_1m": 0.21670904342787364,
     "ret_3m": 0.3570019225092875,
     "ret_6m": 0.0,

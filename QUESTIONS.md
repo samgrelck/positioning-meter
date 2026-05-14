@@ -7,6 +7,23 @@ Append-only — when resolved, mark with ✅ and a brief note rather than deleti
 
 ## Decisions still to make
 
+### ~~FINRA SI pre-June-2021 data quality~~  ✅ RESOLVED — conservative cut applied (V1.12)
+- **Issue caught by user (2026-05-13):** FINRA's own documentation states "Prior to June 2021, the data contains short interest positions in over-the-counter securities only and does not reflect short interest data in exchange-listed securities."
+- **Our downloaded data** appears to contain NYSE-listed names with realistic SI values pre-2021 — contradicts FINRA's own docs.
+- **Possible explanations:**
+    1. Docs are stale or refer to a different FINRA dataset
+    2. FINRA backfilled historical files with exchange-listed data after June 2021
+    3. Pre-2021 NYSE names appear because they had OTC trading reported through FINRA, but the SI numbers may represent only OTC subset (not full exchange-listed SI)
+- **Decision:** trust the docs. `setup/18_ingest_finra_si.py` now automatically drops all pre-June-2021 SI data after ingestion.
+- **Result:** 5 years of verified universe-wide SI (June 2021 - present) instead of 8 years of partly-suspect data. si_true_dtc IC at 3m settled at **−0.030** (was −0.103 on 1y NASDAQ subsample = overfit, was −0.010 on full FINRA = diluted by suspect pre-2021).
+
+### ~~Insider buying as a contrarian signal~~  ✅ RESOLVED — doesn't replicate in TMT
+- **User hypothesis:** insider buying is a bullish signal per Seyhun/Lakonishok-Lee literature; selling is mostly noise (10b5-1 plans, RSU vesting, taxes).
+- **Built** `insider_buying_90d` = max(0, net_insider_$) — zeros out selling days.
+- **Backtest:** IC +0.025 (pct_self) to +0.092 (pct_peer) at 3m forward. Positive IC = signal works as TREND not contrarian in our framework.
+- **Conclusion:** the literature doesn't replicate cleanly in TMT (insider buying is rare; the rare cases don't predict outperformance robustly).
+- **Status:** signal kept in compute pipeline; gets 0 weight in composite via IC-weighted within-bucket scheme.
+
 ### ~~Polygon Options subscription~~  ✅ RESOLVED — staying on yfinance forward-only
 - **Decision:** do NOT subscribe to Polygon Options.
 - **Reasons (in order):**

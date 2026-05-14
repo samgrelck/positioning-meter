@@ -45,7 +45,10 @@ You don't need to refresh everything every day. Here's the pragmatic schedule:
 ```bash
 cd ~/Documents/AI\ workflows/positioning_meter
 python3 setup/04_ingest_short_volume.py   # FINRA daily — settles biweekly
-python3 setup/09_ingest_nasdaq_si.py      # NASDAQ true SI — biweekly
+python3 setup/15_ingest_options_yahoo.py  # Yahoo options chains — daily snapshot
+# Biweekly SI updates (catches new FINRA files):
+python3 setup/17_download_finra_si.py     # Download any new biweekly files
+python3 setup/18_ingest_finra_si.py       # Parse + ingest (auto-drops pre-June-2021)
 ./tools/deploy.sh                          # Re-render with new data
 ```
 
@@ -115,6 +118,7 @@ These are **warnings, not errors**. The script ran successfully. They're pandas 
 | `data/dashboard.html` | The dashboard (open this) |
 | `docs/index.html` | Copy of dashboard for GitHub Pages |
 | `data/positioning.db` | All ingested data (SQLite) |
+| `data/FINRA/` | Downloaded FINRA biweekly SI files (~131 files, 2018-05 → present) |
 | `data/backtest_report.md` | Latest backtest IC + decile metrics |
 | `data/backtest_results.json` | Same data in JSON for tools |
 | `data/universe.csv` | 366-name universe with cluster IDs |

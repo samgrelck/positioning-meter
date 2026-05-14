@@ -45,15 +45,21 @@ open ~/Documents/AI\ workflows/positioning_meter/data/dashboard.html
 
 366 TMT names, market cap ≥ $1.5B, drawn from sister `theme_detector` project. Theme_detector clusters serve as peer groups for cross-sectional percentile ranking.
 
-## Backtest results
+## Backtest results (V1.13)
 
-**Latest backtested version (V1.6, positioning + technical buckets):**
-- Composite IC **−0.026** at 3-month forward (Spearman)
-- Decile spread **−2.64%** (top minus bottom decile mean fwd return)
-- Bottom decile hit rate **56%** (positive forward return when temperature is low)
-- Strongest individual signal: `si_true_dtc` (NASDAQ days-to-cover) IC **−0.064** at 3m
+- Composite IC **−0.034** at 3-month forward (Spearman)
+- Decile spread **−2.4%** (top minus bottom decile mean fwd return)
+- Bottom decile hit rate **59%** (positive forward return when temperature is low)
+- Bucket weights: **Positioning 0.40 / Technical 0.25 / Options 0.35** (positioning-leaning per conceptual prior)
+- Strongest individual signal: `si_true_dtc` (FINRA biweekly days-to-cover) IC **−0.030** at 3m
 
-**V1.7 adds an options bucket** (IV rank, 25Δ skew, term slope, P/C ratio) via yfinance forward-only accumulation. Options signals contribute to today's live composite via cross-sectional ranking but cannot be backtested without paid historical options data (see Limitations).
+**Key history:**
+- V1.10 had an inflated IC of −0.040 driven by si_true_dtc IC of −0.103 measured on only 1y of NASDAQ-only data. Out-of-sample testing with FINRA's full universe-wide SI history revealed that figure was overfit; the more credible IC is −0.030.
+- V1.11 added FINRA biweekly SI files (2018-05 onward) covering 365/366 universe tickers including all NYSE-listed names.
+- V1.12 applied conservative cut per FINRA's own documentation ("Prior to June 2021, the data contains positions in OTC securities only"), retaining only post-June-2021 data — 5 years verified universe-wide.
+- V1.13 adopted positioning-leaning weights to reflect the conceptual case that positioning + options data are harder to fake than reflexive price signals.
+
+**Options bucket** (IV rank, 25Δ skew, term slope, P/C ratio) accumulates forward-only via yfinance. Cannot be backtested without paid historical options data — gets equal-weight within bucket and 0.35 bucket weight as a placeholder. See Limitations.
 
 See `data/backtest_report.md` for full per-signal metrics.
 
@@ -122,10 +128,13 @@ python3 setup/02_ingest_prices.py         # 10y Polygon prices
 python3 setup/03_ingest_financials.py     # Polygon financials, ~16y
 python3 setup/04_ingest_short_volume.py   # FINRA Reg SHO, 6.5y
 python3 setup/05_ingest_insider.py        # openinsider Form 4, 10y
-python3 setup/09_ingest_nasdaq_si.py      # NASDAQ true SI, 1y
 python3 setup/12_ingest_13f.py            # EDGAR 13F, 10y
 python3 setup/13_ingest_estimates.py      # Yahoo estimates snapshot
 python3 setup/14_ingest_etf_flows.py      # ETF AUM snapshot
+python3 setup/15_ingest_options_yahoo.py  # Yahoo options chains (forward-only)
+python3 setup/17_download_finra_si.py     # FINRA biweekly SI files 2018+
+python3 setup/18_ingest_finra_si.py       # Parse FINRA SI, drop pre-June-2021
+# (setup/09_ingest_nasdaq_si.py — RETIRED in V1.11 — replaced by FINRA full-universe)
 
 # Compute + render (run daily after ingestion)
 python3 setup/06_compute_signals.py
@@ -141,11 +150,12 @@ open data/dashboard.html
 | Prices | Polygon Stocks | 10y daily, split-adjusted |
 | Financials | Polygon `vx/list_stock_financials` | up to 16y w/ filing dates |
 | Short volume | FINRA Reg SHO daily files | 6.5y |
-| Short interest (true) | NASDAQ public API | 1y biweekly, NASDAQ-only |
+| **Short interest (true)** | **FINRA biweekly Short Interest files** | **~5y universe-wide (post-June-2021, exchange-listed confirmed per FINRA docs)** |
 | Insider Form 4 | openinsider.com (pre-parsed) | 10y |
 | 13F holdings | SEC EDGAR | 10y, 40 curated HFs |
 | Estimates / actions / earnings | Yahoo Finance | live snapshot |
 | ETF AUM | Yahoo Finance | forward-only |
+| Options chains | Yahoo Finance (yfinance) | forward-only |
 
 ## Architecture
 

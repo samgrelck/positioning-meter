@@ -3,7 +3,7 @@
 > Single source of truth for current state. Updated after each milestone.
 > Sister docs: `DESIGN.md` (architecture), `QUESTIONS.md` (decisions/caveats), `GITHUB_SETUP.md` (publishing), `data/backtest_report.md` (latest backtest).
 
-**Last updated:** 2026-05-12 — **V1.8: IC-weighted within-bucket signals (composite IC improved −0.026 → −0.033) + score-breakdown transparency in drilldown.**
+**Last updated:** 2026-05-13 — **V1.13: FINRA universe-wide SI backfill (post-June-2021, verified) + positioning-leaning weights (Pos 0.40 / Tech 0.25 / Opt 0.35).**
 
 ---
 
@@ -116,7 +116,14 @@ The composite now reads PURELY sentiment + positioning. Names that look "hot" in
 | V1.5 | Valuation → overlay (sentiment/positioning only) | −0.020 | −0.020 | 55% | 56% |
 | V1.6 | Re-weight composite via grid search: pos 0.7 / tech 0.3 | −0.020 | −0.026 | 55% | 56% |
 | V1.7 | +Options bucket: yfinance forward-only (no historical backtest — see "Data licensing decision" above) | n/a* | n/a* | n/a* | n/a* |
-| **V1.8** | **Within-bucket signals IC-weighted via tools/tune_signal_weights.py** | **−0.023** | **−0.033** | **57%** | **57%** |
+| V1.8 | Within-bucket signals IC-weighted via tools/tune_signal_weights.py | −0.023 | −0.033 | 57% | 57% |
+| V1.9 | Inverted options signal directions (P/C, skew, term, IV rank all "fear" measures → high = COLD); options weight 0.15 → 0.30 | −0.022 | −0.031 | 56% | 57% |
+| V1.10 | Technical signals use pct_self only (cross-section was cancelling self-history contrarian signal) | −0.025 | −0.040* | 57% | 58% |
+| V1.11 | FINRA SI backfill 2018+, universe-wide, 365/366 names (replaced 1y NASDAQ API). insider_buying_90d added but doesn't replicate as contrarian | −0.022 | −0.036 | 56% | 57% |
+| V1.12 | Conservative cut: dropped pre-June-2021 SI (FINRA docs say pre-2021 is OTC-only). Verified post-2021 data. Grid optimum: Pos 0.30 / Tech 0.40 / Opt 0.30 | −0.026 | −0.037 | 57% | 59% |
+| **V1.13** | **Positioning-leaning weights (Pos 0.40 / Tech 0.25 / Opt 0.35) per conceptual prior: positioning + options are harder to fake than reflexive price signals** | **−0.023** | **−0.034** | **57%** | **59%** |
+
+*V1.10 IC was inflated by si_true_dtc IC of −0.103 measured on only 1y of NASDAQ-only data. After FINRA backfill exposed it as overfit, the more credible measurement is −0.030 (V1.12+).
 
 *Options bucket can't be backtested without paid historical data, which we've decided not to pursue. Composite IC numbers are unchanged from V1.6 (−0.020 / −0.026) for the positioning+technical signals; options contributes to today's live composite via cross-sectional ranking but doesn't have a backtested IC.
 

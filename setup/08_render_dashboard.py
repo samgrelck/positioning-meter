@@ -1260,7 +1260,7 @@ tr:hover td {{ background: #f8fafc; }}
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.12</b> (Pos 0.30 / Tech 0.40 / Opt 0.30; FINRA SI verified post-June-2021 only per FINRA docs, 364/366 names) · Backtest IC <b>−0.036</b> at 3m fwd · Bot decile hit <b>59%</b></div>
+<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.13</b> (Pos 0.40 / Tech 0.25 / Opt 0.35 — positioning-leaning per conceptual prior: positioning + options data are harder to fake than reflexive price signals) · Backtest IC <b>−0.032</b> at 3m fwd</div>
 </div>
 </header>
 

@@ -128,18 +128,34 @@ def load_data():
 
     # Per-ticker temperature: 30d sparkline (header) + 180d larger chart (drill-down)
     spark_df = pd.read_sql_query(
-        "SELECT ticker, date, temperature FROM composite_daily WHERE date >= date(?, '-200 days')",
+        "SELECT ticker, date, temperature, score_positioning, score_technical, score_options "
+        "FROM composite_daily WHERE date >= date(?, '-200 days')",
         conn, params=(latest,), parse_dates=["date"],
     )
     sparkline_data = {}
     chart_data = {}
+    bucket_chart_data = {}  # last 180d of (date, positioning, technical, options) per ticker
     if not spark_df.empty:
         for t, grp in spark_df.groupby("ticker"):
-            srt = grp.sort_values("date")[["date", "temperature"]].dropna()
-            if len(srt) > 0:
-                vals = srt["temperature"].tolist()
+            srt = grp.sort_values("date")
+            tvals = srt[["date", "temperature"]].dropna()
+            if len(tvals) > 0:
+                vals = tvals["temperature"].tolist()
                 sparkline_data[t] = vals[-30:]
-                chart_data[t] = [(d.strftime("%Y-%m-%d"), v) for d, v in zip(srt["date"], vals)][-180:]
+                chart_data[t] = [(d.strftime("%Y-%m-%d"), v) for d, v in zip(tvals["date"], vals)][-180:]
+            # Bucket-score history: keep days where at least one bucket score is present
+            b = srt[["date", "score_positioning", "score_technical", "score_options"]].dropna(
+                how="all", subset=["score_positioning", "score_technical", "score_options"]
+            )
+            if len(b) > 0:
+                bucket_chart_data[t] = [
+                    (d.strftime("%Y-%m-%d"),
+                     None if pd.isna(p) else float(p),
+                     None if pd.isna(tc) else float(tc),
+                     None if pd.isna(o) else float(o))
+                    for d, p, tc, o in zip(b["date"], b["score_positioning"],
+                                           b["score_technical"], b["score_options"])
+                ][-180:]
 
     # Per-ticker per-signal data (latest day)
     sig_long = pd.read_sql_query(
@@ -191,6 +207,7 @@ def load_data():
         "watchlist": watchlist,
         "sparklines": sparkline_data,
         "chart_data": chart_data,
+        "bucket_chart_data": bucket_chart_data,
         "new_late": new_late,
         "new_wash": new_wash,
         "provenance": compute_provenance(),
@@ -208,7 +225,7 @@ def compute_provenance() -> dict[str, str]:
         "03_ingest_financials_status.json": "Financials (Polygon)",
         "04_ingest_short_volume_status.json": "Short volume (FINRA)",
         "05_ingest_insider_status.json": "Insider Form 4 (openinsider)",
-        "09_ingest_nasdaq_si_status.json": "Short interest (NASDAQ)",
+        "18_ingest_finra_si_status.json": "Short interest (FINRA biweekly)",
         "12_ingest_13f_status.json": "13F holdings (EDGAR)",
         "13_ingest_estimates_status.json": "Estimates (Yahoo)",
         "14_ingest_etf_flows_status.json": "ETF AUM (Yahoo)",
@@ -367,11 +384,68 @@ def _render_6m_chart(series: list) -> str:
     """
 
 
+def _render_bucket_chart(series: list) -> str:
+    """Multi-line SVG of the three composite bucket scores over the last ~6 months.
+    series = list of (date_str, positioning, technical, options); any score may be None."""
+    if not series or len(series) < 5:
+        return ""
+    w, h = 700, 140
+    pad_l, pad_r, pad_t, pad_b = 30, 78, 12, 24
+    plot_w = w - pad_l - pad_r
+    plot_h = h - pad_t - pad_b
+    n = len(series)
+    y50 = pad_t + 0.5 * plot_h
+
+    def line_for(idx, color):
+        pts = []
+        for i, row in enumerate(series):
+            v = row[idx]
+            if v is None:
+                continue
+            x = pad_l + i * plot_w / (n - 1)
+            y = pad_t + (1 - v / 100) * plot_h
+            pts.append(f"{x:.1f},{y:.1f}")
+        if len(pts) < 2:
+            return ""
+        return f'<polyline fill="none" stroke="{color}" stroke-width="1.4" points="{" ".join(pts)}" />'
+
+    series_defs = [(1, "#6366f1", "Positioning"), (2, "#0891b2", "Technical"), (3, "#d97706", "Options")]
+    lines = "".join(line_for(idx, c) for idx, c, _ in series_defs)
+    legend = "".join(
+        f'<g transform="translate({w - pad_r + 6},{pad_t + 8 + k * 16})">'
+        f'<line x1="0" y1="0" x2="14" y2="0" stroke="{c}" stroke-width="2"/>'
+        f'<text x="18" y="3" font-size="9" fill="#475569">{label}</text></g>'
+        for k, (_, c, label) in enumerate(series_defs)
+    )
+    first_d, mid_d, last_d = series[0][0], series[n // 2][0], series[-1][0]
+    return f"""
+    <svg class=spark-6m width="{w}" height="{h}" viewBox="0 0 {w} {h}" aria-label="6-month bucket-score chart">
+      <line x1="{pad_l}" y1="{y50:.1f}" x2="{pad_l + plot_w}" y2="{y50:.1f}" stroke="#cbd5e1" stroke-dasharray="3,3" stroke-width="0.5"/>
+      <text x="2" y="{pad_t + 4}" font-size="10" fill="#94a3b8">100</text>
+      <text x="2" y="{y50 + 3:.1f}" font-size="10" fill="#94a3b8">50</text>
+      <text x="2" y="{h - pad_b + 4}" font-size="10" fill="#94a3b8">0</text>
+      {lines}
+      {legend}
+      <text x="{pad_l}" y="{h - 6}" font-size="10" fill="#94a3b8">{first_d}</text>
+      <text x="{pad_l + plot_w / 2 - 35}" y="{h - 6}" font-size="10" fill="#94a3b8">{mid_d}</text>
+      <text x="{pad_l + plot_w - 60}" y="{h - 6}" font-size="10" fill="#94a3b8">{last_d}</text>
+    </svg>
+    """
+
+
 def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
                      sparkline, chart_series, notes_row, sector_groups, cluster_mates, sector_mates,
+                     bucket_series=None,
                      bucket_weights=None, signal_weights=None, signal_to_bucket=None) -> str:
     t = snap_row["ticker"]
     name = snap_row.get("name") or t
+
+    bucket_chart_svg = _render_bucket_chart(bucket_series) if bucket_series else ""
+    bucket_chart_html = (
+        '<div class=chart-card><div class=chart-card-label>📊 Bucket scores, last 6 months '
+        f'(Positioning / Technical / Options, 0–100)</div>{bucket_chart_svg}</div>'
+        if bucket_chart_svg else ""
+    )
 
     spark_svg = ""
     if sparkline and len(sparkline) > 1:
@@ -639,6 +713,7 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
             <div class=chart-card-label>📈 Temperature, last 6 months (red zone ≥70 = hot, green zone ≤30 = cold)</div>
             {_render_6m_chart(chart_series)}
         </div>
+        {bucket_chart_html}
         {breakdown_html}
         {sig_table}
         {est_html}
@@ -897,6 +972,7 @@ def main(asof: str | None = None):
         sector_mates = {sg: sector_groups[sg]["tickers"] for sg in ticker_to_sectors.get(t, [])}
         drilldowns.append(render_drilldown(
             row, sig_t, est_t, earn_t, actions_t, spark, chart_series, notes_t, sector_groups, cluster_mates, sector_mates,
+            bucket_series=data["bucket_chart_data"].get(t, []),
             bucket_weights=bucket_weights_for_dash,
             signal_weights=signal_weights_for_dash,
             signal_to_bucket=signal_to_bucket_for_dash,
@@ -1378,6 +1454,15 @@ tr:hover td {{ background: #f8fafc; }}
 </div>
 
 <script>
+// Don't let the browser restore the prior scroll position on refresh.
+// The All Names table is injected after DOMContentLoaded, which shifts page
+// height and otherwise lands a reload at the very bottom. Start at the top
+// unless the URL points at a specific #t- ticker anchor.
+if ('scrollRestoration' in history) {{ history.scrollRestoration = 'manual'; }}
+window.addEventListener('load', () => {{
+  if (!window.location.hash.startsWith('#t-')) window.scrollTo(0, 0);
+}});
+
 const CSV = {json.dumps(csv_text)};
 const SECTOR_TICKERS = {json.dumps(sg_ticker_map)};
 const ALL_NAMES = {json.dumps(all_names_data)};

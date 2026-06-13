@@ -12,22 +12,27 @@
 #   - Yahoo ETF AUM                (~2 min)
 #   - openinsider Form 4           (~10 min)
 #
-# What this does NOT run (weekly / quarterly cadence — run those manually
-# when you remember, see README.md):
-#   - FINRA short volume           — biweekly settlement, run weekly
-#   - NASDAQ true SI               — biweekly settlement
-#   - Polygon financials           — quarterly
-#   - EDGAR 13F                    — quarterly (filings 45d post quarter-end)
+# What this does NOT run (handled by their own cron entries — see `crontab -l`):
+#   - FINRA short volume + biweekly SI   — Sunday 3:00am (scripts 04, 17, 18)
+#   - EDGAR 13F                          — quarterly, 17th of Feb/May/Aug/Nov (script 12)
+#     (NASDAQ true SI, script 09, is RETIRED — replaced by FINRA full-universe in V1.11)
+#   - Polygon financials                 — quarterly, run manually as needed (script 03)
+#
+# Error handling: each ingest step is independent — a single failing source
+# (e.g. a Yahoo rate-limit) is logged and counted but does NOT abort the run,
+# so the dashboard still deploys with whatever fresh data succeeded. The script
+# exits non-zero if any step failed, so cron logs / the staleness alert can see it.
 #
 # Usage:
 #   ./tools/refresh_data.sh            # full daily refresh + deploy
 #   ./tools/refresh_data.sh nodeploy   # data only, skip deploy.sh
 #   ./tools/refresh_data.sh fast       # skip slow ones (estimates, options)
 
-set -e
+set -o pipefail
 cd "$(dirname "$0")/.."
 
 MODE="${1:-full}"
+FAILED=()
 
 echo "============================================================"
 echo "Positioning Meter — data refresh ($(date +'%Y-%m-%d %H:%M'))"
@@ -40,6 +45,11 @@ run_step() {
     echo ""
     echo "==> $label"
     eval "$cmd" 2>&1 | tail -3
+    local rc=${PIPESTATUS[0]}
+    if [ "$rc" -ne 0 ]; then
+        echo "  ⚠️  STEP FAILED (exit $rc): $label"
+        FAILED+=("$label")
+    fi
 }
 
 run_step "Polygon prices (~4 min)"               "python3 setup/02_ingest_prices.py"
@@ -61,7 +71,18 @@ else
     echo "Data refresh complete. Running deploy.sh..."
     echo "============================================================"
     ./tools/deploy.sh
+    deploy_rc=$?
+    if [ "$deploy_rc" -ne 0 ]; then
+        echo "  ⚠️  DEPLOY FAILED (exit $deploy_rc)"
+        FAILED+=("deploy")
+    fi
 fi
 
 echo ""
-echo "✅ Done — $(date +'%Y-%m-%d %H:%M')"
+if [ ${#FAILED[@]} -eq 0 ]; then
+    echo "✅ Done — all steps succeeded — $(date +'%Y-%m-%d %H:%M')"
+else
+    echo "⚠️  Done WITH ${#FAILED[@]} FAILED STEP(S) — $(date +'%Y-%m-%d %H:%M'):"
+    for f in "${FAILED[@]}"; do echo "     - $f"; done
+    exit 1
+fi

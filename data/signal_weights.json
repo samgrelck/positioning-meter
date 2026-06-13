@@ -1,12 +1,13 @@
 {
   "horizon": "3m",
   "kind": "pct_self",
-  "note": "Weights computed from |IC| at given horizon, normalized within bucket. Positive-IC signals (trend-following) get weight 0.",
+  "note": "Weights computed from |IC| at given horizon, normalized within bucket. Positive-IC signals (trend-following) get weight 0. V1.14 OVERRIDE: float_turnover_20d pinned at 1.0 (~50% of positioning bucket after normalization) as a deliberate conceptual weight to recognize long/retail crowding, per user direction. Standalone 3m IC is weak (-0.006) so an IC-tuner would near-zero it, but composite IC is itself near-zero (-0.03) and face-validity (MU/SNDK correctly reading crowded) was the better guide. Costs ~0.01 of 3m composite IC (-0.034 -> -0.023).",
   "weights": {
     "insider_net_90d_signed": 0.0,
     "insider_buying_90d": 0.0,
     "short_volume_ratio_14d": 0.4627398368096417,
     "si_true_dtc": 0.5372601631903583,
+    "float_turnover_20d": 1.0,
     "ret_1m": 0.21670904342787364,
     "ret_3m": 0.3570019225092875,
     "ret_6m": 0.0,

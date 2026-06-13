@@ -261,6 +261,8 @@ SIGNAL_DESCRIPTIONS = {
     "insider_net_90d_abs": ("Insider |net 90d| (overlay)", "Magnitude of insider activity."),
     "short_volume_ratio_14d": ("Short volume 14d ratio", "FINRA Reg SHO short-vol/total-vol, 14d avg."),
     "si_true_dtc": ("Short interest days-to-cover", "NASDAQ true SI ÷ avg daily share volume."),
+    "float_turnover_20d": ("Float turnover (20d)", "20-day avg daily share volume ÷ free float. High = heavy churn relative to tradable shares — a long/retail-crowding proxy (the dimension short interest + insider flow miss). High = HOT/crowded."),
+    "inst_own_pct": ("Institutional ownership % (overlay)", "Sum of latest-quarter 13F shares ÷ shares outstanding. LOW = retail-heavy ownership. Overlay only — 13F is quarterly and 45d lagged."),
     "eps_revision_4w": ("EPS revision % 4w (overlay)", "% change in NTM forward EPS over trailing 20 trading days. Forward-only — accumulating since estimates ingestion started; null for early dates."),
     # Options signals (in composite once data accumulates)
     "iv_rank_1y": ("IV rank 1y", "30-day ATM IV as percentile within own trailing 252d range. High = vol expectations elevated (often marks crowded positioning / event risk)."),
@@ -318,7 +320,7 @@ def render_summary_table(df: pd.DataFrame, title: str, subtitle: str = "",
                     <th>Name</th>
                     <th class=num title="Composite 0-100. High=hot/late (contrarian-bearish). Low=cold/washed (contrarian-bullish)">Temp</th>
                     <th class=num title="7-day change in temperature">7d Δ</th>
-                    <th class=num title="Positioning bucket">Pos</th>
+                    <th class=num title="Positioning & crowding: short interest, insider flow, and float turnover (long/retail crowding)">Pos</th>
                     <th class=num title="Technical / price-revealed sentiment">Tech</th>
                     <th class=num title="Options sentiment bucket (IV rank, skew, term slope, P/C)">Opt</th>
                     <th class=num title="Conviction (bucket agreement)">Conv</th>
@@ -1356,7 +1358,7 @@ tr:hover td {{ background: #f8fafc; }}
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>Data as of <b>{asof}</b> {freshness_html} · rendered {generated_at} · {kpi_total} TMT names · <b>V1.13</b> (Pos 0.40 / Tech 0.25 / Opt 0.35 — positioning-leaning per conceptual prior: positioning + options data are harder to fake than reflexive price signals) · Backtest IC <b>−0.032</b> at 3m fwd</div>
+<div class=subtitle>Data as of <b>{asof}</b> {freshness_html} · rendered {generated_at} · {kpi_total} TMT names · <b>V1.14</b> (Pos 0.40 / Tech 0.25 / Opt 0.35; positioning bucket = short interest + insider flow + float-turnover crowding) · Backtest IC <b>−0.023</b> at 3m fwd</div>
 </div>
 </header>
 

@@ -24,6 +24,46 @@ def load_prices() -> pd.DataFrame:
     return closes, volumes
 
 
+def load_float() -> pd.Series:
+    """Latest free-float per ticker (Series, index=ticker). Falls back to
+    shares_out when floatShares is unavailable. Used as the divisor for the
+    float-turnover crowding signal."""
+    conn = connect()
+    df = pd.read_sql_query(
+        "SELECT ticker, float_shares, shares_out FROM share_float "
+        "WHERE asof_date = (SELECT MAX(asof_date) FROM share_float)",
+        conn,
+    )
+    conn.close()
+    if df.empty:
+        return pd.Series(dtype=float)
+    fl = df["float_shares"].fillna(df["shares_out"])
+    return pd.Series(fl.values, index=df["ticker"]).dropna()
+
+
+def load_inst_own_pct() -> pd.Series:
+    """Institutional ownership fraction per ticker (Series, index=ticker):
+    sum of latest-quarter 13F shares / shares_out. LOW = retail-heavy. Overlay
+    only (13F is quarterly + 45d lagged)."""
+    conn = connect()
+    hf = pd.read_sql_query(
+        "SELECT ticker, SUM(shares) AS inst_shares FROM holdings_13f "
+        "WHERE period_end = (SELECT MAX(period_end) FROM holdings_13f) GROUP BY ticker",
+        conn,
+    )
+    so = pd.read_sql_query(
+        "SELECT ticker, shares_out FROM share_float "
+        "WHERE asof_date = (SELECT MAX(asof_date) FROM share_float)",
+        conn,
+    )
+    conn.close()
+    if hf.empty or so.empty:
+        return pd.Series(dtype=float)
+    m = hf.merge(so, on="ticker", how="inner")
+    m = m[m["shares_out"] > 0]
+    return pd.Series((m["inst_shares"] / m["shares_out"]).values, index=m["ticker"]).dropna()
+
+
 def load_short_volume() -> pd.DataFrame:
     """Wide DF of short-volume ratio (0..1): index=date, columns=tickers."""
     conn = connect()

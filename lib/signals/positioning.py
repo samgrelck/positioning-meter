@@ -28,6 +28,22 @@ def insider_signals(insider_rolling_90d: pd.DataFrame, prices_index: pd.Datetime
     }
 
 
+def float_turnover_signal(volumes: pd.DataFrame, float_shares: pd.Series,
+                          window: int = 20) -> pd.DataFrame:
+    """20-day average daily share volume as a fraction of free float.
+
+    High = heavy churn relative to tradable shares — a long/retail-crowding
+    proxy (the dimension short-interest + insider signals miss). Direction is
+    natural: high turnover = HOT (crowded). `float_shares`: Series ticker->float.
+    """
+    if volumes is None or volumes.empty or float_shares is None or len(float_shares) == 0:
+        return pd.DataFrame()
+    avg_vol = volumes.rolling(window, min_periods=max(5, window // 2)).mean()
+    fl = float_shares.reindex(avg_vol.columns)
+    fl = fl.where(fl > 0)
+    return avg_vol.div(fl, axis=1)
+
+
 def short_volume_signal(short_volume: pd.DataFrame, window: int = 14) -> pd.DataFrame:
     """Rolling mean of daily short-volume ratio."""
     if short_volume.empty:

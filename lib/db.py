@@ -149,6 +149,17 @@ CREATE TABLE IF NOT EXISTS fundamentals_q (
 );
 CREATE INDEX IF NOT EXISTS idx_fund_q_filing ON fundamentals_q(ticker, filing_date_est);
 
+-- Free float + shares outstanding snapshot (yfinance). Float moves slowly, so a
+-- periodic snapshot is sufficient; the latest row per ticker is used as the
+-- divisor for float-turnover (a long/retail-crowding proxy).
+CREATE TABLE IF NOT EXISTS share_float (
+    ticker        TEXT NOT NULL,
+    asof_date     TEXT NOT NULL,
+    float_shares  REAL,
+    shares_out    REAL,
+    PRIMARY KEY (ticker, asof_date)
+);
+
 -- ============================================================
 -- COMPUTED SIGNAL TABLES (one row per ticker per date per signal)
 -- ============================================================

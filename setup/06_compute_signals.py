@@ -41,6 +41,9 @@ SIGNAL_TO_BUCKET = {
     "insider_buying_90d": "positioning",  # buying-only — inverted at signal level
     "short_volume_ratio_14d": "positioning",
     "si_true_dtc": "positioning",
+    # V1.14: long/retail-crowding proxy — heavy float turnover = crowded (HOT).
+    # Closes the construct gap where positioning only saw the short + insider side.
+    "float_turnover_20d": "positioning",
     # options — populated as data is ingested (yfinance forward-only or
     # Polygon Options Advanced historical backfill)
     "iv_rank_1y": "options",
@@ -65,6 +68,7 @@ OVERLAY_SIGNALS = {
     "hf_count_13f": "positioning_trend_overlay",
     "hf_count_change_4q": "positioning_trend_overlay",
     "hf_top_concentration": "positioning_overlay",
+    "inst_own_pct": "positioning_overlay",  # V1.14: 13F shares / shares_out — LOW = retail-heavy
     # Forward-only — null until we accumulate ≥ 20 days of estimates_daily snapshots.
     # Could promote to composite later once backtest data exists.
     "eps_revision_4w": "expectations_overlay",
@@ -151,6 +155,26 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
     if not insider_buying_90d.empty:
         # Reindex calendar -> trading days
         pos_signals["insider_buying_90d"] = insider_buying_90d.reindex(closes.index, method="ffill")
+    # V1.14: float turnover (long/retail-crowding) IN composite + institutional
+    # ownership % as overlay. Closes the construct gap flagged in review — the
+    # positioning bucket previously only measured the short + insider side and
+    # was blind to long-side/retail crowding (e.g. read MU/SNDK as "light").
+    float_shares = loaders.load_float()
+    ft = positioning.float_turnover_signal(volumes, float_shares, window=20)
+    if not ft.empty:
+        pos_signals["float_turnover_20d"] = ft.reindex(closes.index)
+        print(f"  float_turnover_20d: {ft.notna().any().sum()} tickers with float")
+    else:
+        print("  WARN: float_turnover_20d empty — no share_float data (run setup/19_ingest_float.py)")
+    inst_own = loaders.load_inst_own_pct()
+    if len(inst_own) > 0:
+        io_panel = pd.DataFrame(index=closes.index, columns=closes.columns, dtype=float)
+        for t, v in inst_own.items():
+            if t in io_panel.columns:
+                io_panel[t] = v
+        pos_signals["inst_own_pct"] = io_panel
+        print(f"  inst_own_pct overlay: {len(inst_own)} tickers")
+
     # Merge in options signals
     pos_signals.update(options_panels)
 

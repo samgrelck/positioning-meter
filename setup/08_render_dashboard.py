@@ -496,8 +496,8 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
         <p class=hint>Each signal is ranked vs (a) its own 5y history and (b) the full TMT universe today. The two are blended 50/50 to form a per-signal score, which is then weighted by the signal-weight column to form the bucket score.</p>
         <table class=signals>
             <thead><tr><th>Signal</th><th>Bucket</th><th class=num>Raw value</th>
-                <th class=num title="Percentile vs own 5-year history">%ile (self)</th>
-                <th class=num title="Percentile vs the full TMT universe">%ile (peer)</th></tr></thead>
+                <th class=num title="Percentile of this signal vs THIS stock's own 5-year history (is it extended vs its own norm?)">%ile vs own 5y</th>
+                <th class=num title="Percentile of this signal vs ALL TMT names today (is it extended vs peers right now?)">%ile vs TMT peers</th></tr></thead>
             <tbody>{''.join(sig_rows) if sig_rows else '<tr><td colspan=5 class=empty>(no signals)</td></tr>'}</tbody>
         </table>
     """
@@ -900,6 +900,22 @@ def main(asof: str | None = None):
     data = load_data()
     snap = data["snap"]
     asof = data["latest"]
+
+    # Freshness badge — make staleness obvious at a glance (no mental date math)
+    try:
+        _age = (date.today() - datetime.strptime(str(asof)[:10], "%Y-%m-%d").date()).days
+    except (ValueError, TypeError):
+        _age = None
+    if _age is None:
+        freshness_html = ""
+    elif _age <= 1:
+        freshness_html = f'<span class="freshness fresh">✓ updated {"today" if _age == 0 else "yesterday"}</span>'
+    elif _age <= 4:
+        freshness_html = f'<span class="freshness ok">{_age} days old</span>'
+    else:
+        freshness_html = f'<span class="freshness stale">⚠️ {_age} days old — may be out of date</span>'
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
     sector_groups = load_sector_groups()
 
     wl_tickers = set(data["watchlist"]["ticker"]) if not data["watchlist"].empty else set()
@@ -1070,6 +1086,10 @@ body {{
 .app-header h1 {{ margin: 0 0 0.25rem 0; font-size: 1.75rem; font-weight: 700; }}
 .app-header .subtitle {{ opacity: 0.85; font-size: 0.875rem; }}
 .app-header .subtitle b {{ font-weight: 600; }}
+.freshness {{ display: inline-block; padding: 0.05rem 0.45rem; border-radius: 0.6rem; font-size: 0.78rem; font-weight: 600; vertical-align: middle; }}
+.freshness.fresh {{ background: #dcfce7; color: #166534; }}
+.freshness.ok {{ background: #fef9c3; color: #854d0e; }}
+.freshness.stale {{ background: #fee2e2; color: #991b1b; }}
 
 /* KPI tiles */
 .kpis {{
@@ -1336,7 +1356,7 @@ tr:hover td {{ background: #f8fafc; }}
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>As of <b>{asof}</b> · {kpi_total} TMT names · <b>V1.13</b> (Pos 0.40 / Tech 0.25 / Opt 0.35 — positioning-leaning per conceptual prior: positioning + options data are harder to fake than reflexive price signals) · Backtest IC <b>−0.032</b> at 3m fwd</div>
+<div class=subtitle>Data as of <b>{asof}</b> {freshness_html} · rendered {generated_at} · {kpi_total} TMT names · <b>V1.13</b> (Pos 0.40 / Tech 0.25 / Opt 0.35 — positioning-leaning per conceptual prior: positioning + options data are harder to fake than reflexive price signals) · Backtest IC <b>−0.032</b> at 3m fwd</div>
 </div>
 </header>
 

@@ -23,8 +23,20 @@ def rolling_percentile_rank(series: pd.Series, window: int) -> pd.Series:
         valid = x[~np.isnan(x)]
         if len(valid) < 2:
             return np.nan
-        # Rank of last value among the window
-        rank = (valid <= x[-1]).sum() / len(valid)
+        last = x[-1]
+        # No dispersion (constant / all-zero window) => percentile is undefined.
+        # Return NaN so the signal falls back to pct_peer (or drops from the
+        # bucket blend) instead of being spuriously ranked at the top by a tie
+        # rule. This is the source of the "raw 0 -> 100th %ile" artifact on
+        # sparse signals like insider_buying_90d (~88% of names are 0).
+        if valid.max() == valid.min():
+            return np.nan
+        # Midpoint tie rank: tied values sit at the mean of their positions
+        # rather than all being pushed to 100 by a `<=` rule. Matches the
+        # 'mean' convention used by scipy.percentileofscore / pandas rank.
+        below = (valid < last).sum()
+        equal = (valid == last).sum()
+        rank = (below + 0.5 * equal) / len(valid)
         return rank * 100.0
 
     return series.rolling(window=window, min_periods=max(20, window // 5)).apply(_rank, raw=True)

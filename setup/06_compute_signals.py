@@ -175,13 +175,16 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
         window = fast_window if bucket == "options" else slow_window
         pct_self[sig_name] = pct_self_panel(panel, window)
 
-    # V1.11: Invert raw values for signals where HIGH raw = COLD direction.
-    # insider_buying_90d: high net buying = bullish positioning = washout (COLD).
-    # Same as options signals which were already inverted in load_options_panels.
-    INVERT_RAW = {"insider_buying_90d"}
-    for sig_name in INVERT_RAW:
-        if sig_name in pos_signals and not pos_signals[sig_name].empty:
-            pos_signals[sig_name] = -pos_signals[sig_name]
+    # V1.11 intent: signals where HIGH raw = COLD direction must be inverted so
+    # high values pull the composite DOWN (contrarian-bullish). insider_buying_90d:
+    # high net insider buying = bullish = washout (COLD).
+    # NOTE (bugfix): the old code negated pos_signals[...] here, but pct_self had
+    # already been computed from raw_signals (a separate reference) and pct_peer
+    # was computed from raw_signals too — so the negation never reached the
+    # percentiles and the inversion was a no-op (high buying scored HOT, backwards).
+    # Fixed by inverting the PERCENTILES after they're computed (see INVERT_PCT
+    # below), which also keeps raw_value as the real buying $ for display.
+    INVERT_PCT = {"insider_buying_90d"}
 
     # V1.10: For TECHNICAL signals only — use pct_self alone, NOT the blend.
     # Empirical finding: technical signals are contrarian at the OWN-HISTORY
@@ -217,6 +220,15 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
     for sig_name in TECH_USE_SELF_ONLY:
         if sig_name in pct_self and sig_name in pct_peer:
             pct_peer[sig_name] = pct_self[sig_name]
+
+    # Invert percentiles for HIGH-raw=COLD signals (see INVERT_PCT note above):
+    # high insider buying should pull the composite DOWN, so flip 0..100 -> 100..0
+    # on both percentile dimensions. raw_value (stored separately) is untouched.
+    for sig_name in INVERT_PCT:
+        if sig_name in pct_self and pct_self[sig_name] is not None and not pct_self[sig_name].empty:
+            pct_self[sig_name] = 100.0 - pct_self[sig_name]
+        if sig_name in pct_peer and pct_peer[sig_name] is not None and not pct_peer[sig_name].empty:
+            pct_peer[sig_name] = 100.0 - pct_peer[sig_name]
 
     # Assemble bucket scores + composite
     write_status({"phase": "assemble"})

@@ -331,7 +331,7 @@ tr:hover td { background: #f8fafc; }
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>Data as of <b>2026-06-12</b> <span class="freshness ok">2 days old</span> · rendered 2026-06-14 17:36 · 365 TMT names · <b>V1.17</b> (Pos 0.50 / Tech 0.20 / Opt 0.30; positioning = short interest + insider flow + float-turnover crowding) · <b>1-month factor-neutral</b> IC <b>−0.021</b> in-sample / <b>−0.011</b> out-of-sample (t −1.7) · weak signal, see Backtest tab</div>
+<div class=subtitle>Data as of <b>2026-06-12</b> <span class="freshness ok">2 days old</span> · rendered 2026-06-14 17:54 · 365 TMT names · <b>V1.17</b> (Pos 0.50 / Tech 0.20 / Opt 0.30; positioning = short interest + insider flow + float-turnover crowding) · <b>1-month factor-neutral</b> IC <b>−0.023</b> in-sample / <b>−0.019</b> out-of-sample (t −2.6) · weak signal, see Backtest tab</div>
 </div>
 </header>
 
@@ -354,7 +354,7 @@ tr:hover td { background: #f8fafc; }
 
 <div class=gloss-card>
 <h4>Temperature (0–100)</h4>
-<p>The composite "how hot/late" score (0–100). Each signal is scored as a percentile, then within each bucket signals are weighted by their backtest IC. Composite = <b>weighted average of buckets</b>: <b>positioning 0.50 + technical 0.20 + options 0.30</b>, renormalized when a bucket is missing.</p><p><b>How percentiles are computed:</b> every composite signal (all three buckets) is a 50/50 blend of <code>pct_self</code> (vs own 5y history) and <code>pct_peer</code> (vs the full TMT universe). <b>Validated at the 1-month, factor-neutral horizon (in-sample IC −0.021, t −3.5; out-of-sample −0.011, t −1.7) — full method, including why 1-month, is in the 🧮 Methodology card on the Backtest tab.</b></p>
+<p>The composite "how hot/late" score (0–100). Each signal is scored as a percentile, then within each bucket signals are weighted by their backtest IC. Composite = <b>weighted average of buckets</b>: <b>positioning 0.50 + technical 0.20 + options 0.30</b>, renormalized when a bucket is missing.</p><p><b>How percentiles are computed:</b> every composite signal (all three buckets) is a 50/50 blend of <code>pct_self</code> (vs own 5y history) and <code>pct_peer</code> (vs the full TMT universe). <b>Validated at the 1-month, factor-neutral horizon — the current (auto-computed) in-sample / out-of-sample IC numbers and full method are in the 🧮 Methodology card on the Backtest tab.</b></p>
 </div>
 
 <div class=gloss-card>
@@ -400,7 +400,7 @@ tr:hover td { background: #f8fafc; }
 
 <div class=gloss-card>
 <h4>Backtest validation (V1.17)</h4>
-<p><b>1-month, factor-neutral</b>: in-sample IC <b>−0.021</b> (t −3.5); <b>walk-forward out-of-sample IC −0.011</b> (t −1.7) — the rank signal partially survives but is weak/borderline, and the decile long/short is unreliable out-of-sample (noisy, ~flat). Treat as idea-generation, not a standalone strategy. 3-month is insignificant. Options is live but unvalidated (yfinance history too short) — its weight is a prior. See the 🧮 Methodology card for full detail.</p>
+<p><b>1-month, factor-neutral</b>: the rank signal partially survives out-of-sample but is weak/borderline, and the decile long/short is unreliable out-of-sample. Treat as idea-generation, not a standalone strategy. 3-month is insignificant. Options is live but unvalidated (yfinance history too short) — its weight is a prior. <b>Current auto-computed IC / t-stat numbers are in the 🧮 Methodology card</b> on the Backtest tab.</p>
 </div>
 
 </div>
@@ -1952,19 +1952,19 @@ tr:hover td { background: #f8fafc; }
           </ul>
         </li>
         <li>Temperature = weighted average of the buckets (re-normalized if a bucket has no data). High = crowded/stretched/late (contrarian-bearish); low = washed-out (contrarian-bullish).</li>
-        <li>Within-bucket weights come from each signal's <b>1-month factor-neutral IC</b>; trend-following (wrong-signed) signals get zero. Across-bucket weights tilt to positioning — the only bucket strongly validated in-sample — with a small technical weight (which still adds value) and options held as a forward-looking prior (its history is too short to backtest).</li>
+        <li>Within-bucket weights come from each signal's <b>1-month factor-neutral IC</b>; trend-following (wrong-signed) signals get zero. Across-bucket weights tilt to positioning — the strongest-validated bucket (~2× technical) — with technical kept at a smaller (still-additive) weight and options held as a forward-looking prior (its history is too short to backtest).</li>
       </ol>
 
       <h4>How it was validated — and why 1-month is the reference horizon</h4>
-      <p>We score the signal by <b>Information Coefficient</b> (rank correlation of Temperature with forward returns; for a contrarian signal, <b>negative is good</b>). Raw IC <em>understates</em> the edge because market/sector/beta moves dominate returns, so we measure against <b>factor-neutral residuals</b> (sector- and beta-stripped), using <b>non-overlapping periods</b> so the statistics aren't inflated by overlapping return windows.</p>
+      <p>We score the signal by <b>Information Coefficient</b> (rank correlation of Temperature with forward returns; for a contrarian signal, <b>negative is good</b>). Raw IC <em>understates</em> the edge because market/sector/beta moves dominate returns, so we measure against <b>factor-neutral residuals</b> (sector- and beta-stripped), using <b>non-overlapping periods</b> so the statistics aren't inflated by overlapping return windows. <span class=basis>(Numbers below auto-computed by <code>tools/compute_validation_stats.py</code>, as of 2026-06-12.)</span></p>
       <table class=signals style="max-width:640px">
         <thead><tr><th>1-month, factor-neutral</th><th class=num>IC</th><th class=num>t-stat</th><th class=num>Decile L/S (ann.)</th></tr></thead>
         <tbody>
-          <tr><td><b>In-sample</b> (weights tuned on same data)</td><td class="num mono chg-down">−0.021</td><td class="num mono">−3.5</td><td class="num mono chg-up">+4%/yr</td></tr>
-          <tr><td><b>Out-of-sample</b> (walk-forward)</td><td class="num mono chg-down">−0.011</td><td class="num mono">−1.7</td><td class="num mono">~flat</td></tr>
+          <tr><td><b>In-sample</b> (120 mo; weights tuned on same data)</td><td class="num mono chg-down">−0.023</td><td class="num mono">−4.0</td><td class="num mono chg-up">+5.3%</td></tr>
+          <tr><td><b>Out-of-sample</b> (84 mo; walk-forward)</td><td class="num mono chg-down">−0.019</td><td class="num mono">−2.6</td><td class="num mono">+1.1%</td></tr>
         </tbody>
       </table>
-      <p>1 month beats 3 months (3m IC is weak/insignificant), so it's the reference horizon. Weights were tuned to this 1-month factor-neutral target (<code>tools/tune_weights_1m.py</code>, <code>tools/bucket_weight_scan.py</code>). <b>But the in-sample numbers are optimistic.</b> A proper <b>walk-forward test</b> (tune on past, measure on held-out future; <code>tools/walk_forward.py</code>) shows the rank IC <b>partially survives</b> out-of-sample (−0.011, t −1.7, ~60% of in-sample, borderline-significant) — but the <b>decile long/short is unreliable out of sample</b> (noisy, roughly flat, swings widely with the sample). The rank IC is the more stable read; the L/S is not tradeable.</p>
+      <p>1 month beats 3 months (3m IC is weak/insignificant), so it's the reference horizon. Weights were tuned to this 1-month factor-neutral target (<code>tools/tune_weights_1m.py</code>, <code>tools/bucket_weight_scan.py</code>). <b>But the in-sample numbers are optimistic.</b> A proper <b>walk-forward test</b> (tune on past, measure on held-out future; <code>tools/walk_forward.py</code>) shows the rank IC <b>partially survives</b> out-of-sample (−0.019, t −2.6, borderline-significant) but weakens — and the <b>decile long/short is noisy and unreliable</b> out of sample (it swings widely with the sample, so it's not tradeable). The rank IC is the more stable read.</p>
       <p class=hint><b>Honest read:</b> a <b>weak</b> rank signal that partially generalizes, not a tradeable standalone strategy. Use it for breadth and as <b>one input alongside fundamentals / idea-generation</b> — do not trade the decile spread on its own. (Earlier headline t-stats ≈ −11 were inflated by overlapping windows; corrected and out-of-sample, the edge is modest.)</p>
     </div>
     
@@ -194294,7 +194294,7 @@ tr:hover td { background: #f8fafc; }
 <p><b>Signals</b>: ~27 daily signals — 15 in the composite, the rest overlay-only. Inclusion driven by backtest IC sign (positive IC = trend-following, excluded from the contrarian composite).</p>
 <p><b>Percentile basis</b>: every composite signal (all three buckets) is a <b>50/50 blend</b> of the stock's own-5yr-history rank and its rank vs the full TMT universe today — so each percentile blends "extended vs its own norm?" with "extended vs peers right now?". Bucket scores are the (IC-weighted) average of their signals' percentiles.</p>
 <p><b>Composite</b>: weighted average of bucket scores (Pos 0.50 / Tech 0.20 / Opt 0.30), reweighted when a bucket is missing.</p>
-<p><b>Backtest (V1.17)</b>: <b>1-month, factor-neutral, non-overlapping</b>. In-sample IC <b>−0.021</b> (t −3.5). Walk-forward <b>out-of-sample IC −0.011</b> (t −1.7): the rank signal partially survives (~60% of in-sample) but is weak/borderline; the decile long/short is unreliable out-of-sample (noisy, ~flat). 3-month is insignificant. Weights tuned to this horizon (<code>tools/tune_weights_1m.py</code>, <code>tools/bucket_weight_scan.py</code>; OOS via <code>tools/walk_forward.py</code>). Options has no backtest history — its weight is a prior. See the 🧮 Methodology card.</p>
+<p><b>Backtest (V1.17)</b>: <b>1-month, factor-neutral, non-overlapping</b>. In-sample IC <b>−0.023</b> (t −4.0). Walk-forward <b>out-of-sample IC −0.019</b> (t −2.6): the rank signal partially survives but is weak/borderline; the decile long/short is unreliable out-of-sample. 3-month is insignificant. Numbers auto-computed by <code>tools/compute_validation_stats.py</code> (as of 2026-06-12); weights tuned via <code>tools/tune_weights_1m.py</code> + <code>tools/bucket_weight_scan.py</code>. Options has no backtest history — its weight is a prior. See the 🧮 Methodology card.</p>
 <p><b>Limitations</b>: options bucket is live but unvalidated (no historical options data). Float uses a current snapshot across history (mild look-ahead). ETF flows + EPS revisions are forward-only. 13F has a 45-day lag and is long-only.</p>
 </div>
 </details>

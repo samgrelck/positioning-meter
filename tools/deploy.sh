@@ -11,6 +11,14 @@ python3 setup/06_compute_signals.py | tail -3
 echo "==> Running backtest..."
 python3 setup/07_run_backtest.py 2>&1 | grep COMPOSITE | tail -3
 
+echo "==> Validation stats (auto-computed; refreshed ~weekly)..."
+VS=data/validation_stats.json
+if [ ! -f "$VS" ] || [ -n "$(find "$VS" -mtime +6 2>/dev/null)" ]; then
+    python3 tools/compute_validation_stats.py || echo "  (validation stats failed; dashboard keeps previous values)"
+else
+    echo "  fresh (<6 days old), skipping"
+fi
+
 echo "==> Rendering dashboard..."
 python3 setup/08_render_dashboard.py | tail -1
 

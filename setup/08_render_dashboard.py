@@ -477,7 +477,7 @@ def render_model_book(snap: pd.DataFrame) -> str:
     return f"""
     <div class=panel>
       <h3>📕 Model book — candidate contrarian basket</h3>
-      <p class=hint>The composite's measured edge is the <b>decile long/short</b> (+7.5%/yr, factor-neutral at 1 month), not the raw gradient — so this is the part that backtested. <b>Bottom-decile</b> (most washed-out) = candidate <b>longs</b>; <b>top-decile</b> (most crowded) = candidate <b>shorts / avoids</b>. Designed to be held <b>market- and sector-neutral</b> (balance $ and clusters across the two sides). This is a <b>screen, not advice</b> — pair with fundamentals, and remember the signal is weak (combine, don't trade standalone).</p>
+      <p class=hint>The temperature decile extremes: <b>bottom-decile</b> (most washed-out) = candidate <b>longs</b>; <b>top-decile</b> (most crowded) = candidate <b>shorts / avoids</b>, meant to be viewed market/sector-neutral (balance $ and clusters across the two sides). <b>Important caveat:</b> the decile long/short was +7.5%/yr <em>in-sample</em> but <b>did NOT hold out-of-sample</b> in walk-forward testing (noisy, slightly negative) — so this is an <b>idea-generation screen, not a strategy and not advice</b>. The underlying rank signal is weak; pair with fundamentals and don't trade these lists standalone.</p>
       <div class=book-grid>
         <div>
           <h4 class=chg-up>🟢 Candidate longs — washed-out (bottom decile, temp ≤ {lo_cut:.0f})</h4>
@@ -603,8 +603,10 @@ def render_score_narrative(snap_row, sig_long) -> str:
                     sb.append(f"{lbl(r['signal_name'])} {word} ({_ord(dd)})")
                 if sb:
                     bits = " — " + ", ".join(sb)
+        basis = "%iles vs own 5-yr history" if bname == "technical" else "%iles blend own-history + TMT peers"
         pillar_rows.append(
-            f'<li><b>{label[bname].capitalize()} {score:.0f} ({desc(score)})</b> — {lead}{bits}.</li>')
+            f'<li><b>{label[bname].capitalize()} {score:.0f} ({desc(score)})</b> — {lead}{bits} '
+            f'<span class=basis>({basis})</span>.</li>')
     pillars_html = f'<ul class=pillars>{"".join(pillar_rows)}</ul>' if pillar_rows else ""
 
     return (f'<div class="score-narrative"><h4>📝 In a nutshell</h4>'
@@ -769,7 +771,7 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
                             <thead><tr>
                                 <th>Signal</th>
                                 <th class=num>Dual %ile</th>
-                                <th class=num title="Weight from |IC| at 3m fwd, normalized within bucket">Sig weight</th>
+                                <th class=num title="Weight from |IC| at 1m fwd (factor-neutral), normalized within bucket">Sig weight</th>
                                 <th class=num>Contribution</th>
                             </tr></thead>
                             <tbody>{''.join(rows)}</tbody>
@@ -954,10 +956,10 @@ def _render_decile_bars(decile_means: dict, label: str = "") -> str:
 
 def render_methodology_card() -> str:
     """Plain-language explanation of how Temperature is computed and how it was
-    validated — so the score is transparent, not a black box (V1.14)."""
+    validated — so the score is transparent, not a black box (V1.15)."""
     return """
     <div class="panel" id="methodology">
-      <h3>🧮 How the score is built &amp; validated (V1.14)</h3>
+      <h3>🧮 How the score is built &amp; validated (V1.15)</h3>
       <p class=hint>This is a contrarian <b>sentiment/positioning</b> score, not a price target — it pairs with fundamental work, it doesn't replace it.</p>
 
       <h4>How Temperature (0–100) is computed</h4>
@@ -976,15 +978,15 @@ def render_methodology_card() -> str:
 
       <h4>How it was validated — and why 1-month is the reference horizon</h4>
       <p>We score the signal by <b>Information Coefficient</b> (rank correlation of Temperature with forward returns; for a contrarian signal, <b>negative is good</b>). Raw IC <em>understates</em> the edge because market/sector/beta moves dominate returns, so we measure against <b>factor-neutral residuals</b> (sector- and beta-stripped), using <b>non-overlapping periods</b> so the statistics aren't inflated by overlapping return windows.</p>
-      <table class=signals style="max-width:560px">
-        <thead><tr><th>Horizon</th><th class=num>Factor-neutral IC</th><th class=num>t-stat</th><th class=num>Decile long/short (ann.)</th></tr></thead>
+      <table class=signals style="max-width:640px">
+        <thead><tr><th>1-month, factor-neutral</th><th class=num>IC</th><th class=num>t-stat</th><th class=num>Decile L/S (ann.)</th></tr></thead>
         <tbody>
-          <tr><td><b>1 month</b></td><td class="num mono chg-down">−0.021</td><td class="num mono">−3.2</td><td class="num mono chg-up">+7.5%/yr</td></tr>
-          <tr><td>3 month</td><td class="num mono">−0.016</td><td class="num mono">−1.7</td><td class="num mono chg-up">+2.9%/yr</td></tr>
+          <tr><td><b>In-sample</b> (weights tuned on same data)</td><td class="num mono chg-down">−0.021</td><td class="num mono">−3.2</td><td class="num mono chg-up">+7.5%/yr</td></tr>
+          <tr><td><b>Out-of-sample</b> (walk-forward)</td><td class="num mono chg-down">−0.012</td><td class="num mono">−1.8</td><td class="num mono chg-down">−1.8%/yr</td></tr>
         </tbody>
       </table>
-      <p>The contrarian edge is <b>concentrated at ~1 month</b>: significant (t ≈ −3.2) with a <b>+7.5%/yr</b> factor-neutral spread between the most-washed-out and most-crowded deciles. At 3 months it's weaker and not significant — so we treat <b>1 month as the reference horizon</b>. (Within-bucket weights and the 0.50/0.15/0.35 bucket split were both tuned to this 1-month, factor-neutral target via <code>tools/tune_weights_1m.py</code> and <code>tools/bucket_weight_scan.py</code>.)</p>
-      <p class=hint><b>Honest read:</b> this is a <b>weak-but-real</b> signal, not a strong one. Earlier headline t-stats (≈ −11) were inflated by overlapping windows; corrected, the edge is modest. Use it for breadth (many names) and as one input alongside fundamentals — not as a standalone timing tool. Reproduce with <code>tools/factor_neutral_backtest.py</code>.</p>
+      <p>1 month beats 3 months (3m IC is weak/insignificant), so it's the reference horizon. Weights were tuned to this 1-month factor-neutral target (<code>tools/tune_weights_1m.py</code>, <code>tools/bucket_weight_scan.py</code>). <b>But the in-sample numbers are optimistic.</b> A proper <b>walk-forward test</b> (tune on past, measure on held-out future; <code>tools/walk_forward.py</code>) shows the rank IC <b>partially survives</b> out-of-sample (−0.012, t −1.8, ~60% of in-sample, borderline-significant) — but the <b>decile long/short does NOT hold out of sample</b> (noisy, slightly negative pooled). The +7.5%/yr was in-sample optimism.</p>
+      <p class=hint><b>Honest read:</b> a <b>weak</b> rank signal that partially generalizes, not a tradeable standalone strategy. Use it for breadth and as <b>one input alongside fundamentals / idea-generation</b> — do not trade the decile spread on its own. (Earlier headline t-stats ≈ −11 were inflated by overlapping windows; corrected and out-of-sample, the edge is modest.)</p>
     </div>
     """
 
@@ -1027,7 +1029,7 @@ def render_backtest_card(results: list) -> str:
         bars = _render_decile_bars(r.get("decile_means", {}))
         comp_rows.append(f"""
             <tr>
-                <td><b>Composite (V1.8)</b></td>
+                <td><b>Composite (raw, legacy)</b></td>
                 <td>{r['horizon']}</td>
                 <td class='num mono {ic_cls}'>{ic:+.4f}</td>
                 <td class=num>{r['top_hit_rate']:.1%}</td>
@@ -1038,8 +1040,8 @@ def render_backtest_card(results: list) -> str:
 
     return f"""
     <div class="panel" id="backtest-panel">
-        <h3>📈 Backtest validation (V1.8)</h3>
-        <p class=hint>Information Coefficient (Spearman) per signal vs forward returns. <b class=chg-down>Negative IC</b> = contrarian (high signal → negative forward return). Bars show decile-mean forward returns: 10 bars left-to-right = bottom-decile (cold) → top-decile (hot). For a working contrarian signal you want bars sloping <span class=chg-down>green-down on the left</span> and <span class=chg-up>red-up on the right</span>.</p>
+        <h3>📈 Per-signal IC (raw, 3-month — legacy reference)</h3>
+        <p class=hint><b>The validated, current numbers are in the 🧮 Methodology card above</b> (1-month, factor-neutral). This table is a per-signal reference using <b>raw</b> (non-factor-neutral) 3-month IC, kept because the decile bars show each signal's shape. Information Coefficient (Spearman) per signal vs forward returns. <b class=chg-down>Negative IC</b> = contrarian (high signal → negative forward return). Bars: 10 left-to-right = bottom-decile (cold) → top-decile (hot); a working contrarian signal slopes <span class=chg-down>down-left</span> / <span class=chg-up>up-right</span>.</p>
         <div class=table-wrap>
         <table class=signals>
             <thead><tr><th>Signal</th><th>Best</th><th class=num>IC</th><th class=num>Top hit</th><th class=num>Bot hit</th><th>Decile spread (cold → hot)</th></tr></thead>
@@ -1103,8 +1105,8 @@ def render_glossary() -> str:
 </div>
 
 <div class=gloss-card>
-<h4>Backtest validation (V1.8 positioning+technical only)</h4>
-<p>Composite IC <b>−0.034</b> at 3-month forward (Spearman). Bottom-decile temperature → 58% positive forward return; top-decile → 54% negative. Strongest individual signal: <code>si_true_dtc</code> (NASDAQ days-to-cover) IC <b>−0.080</b> at 3m. <b>Options bucket added V1.7 (yfinance forward-only) — not yet backtested due to no historical options data; live cross-sectional ranking working today.</b> Pct_peer now uses universe-wide ranking (cluster-relative was suppressing cluster-wide moves like a hot CPU cluster).</p>
+<h4>Backtest validation (V1.15)</h4>
+<p><b>1-month, factor-neutral</b>: in-sample IC <b>−0.021</b> (t −3.2); <b>walk-forward out-of-sample IC −0.012</b> (t −1.8) — the rank signal partially survives but is weak/borderline, and the decile long/short did <b>not</b> hold out-of-sample. Treat as idea-generation, not a standalone strategy. 3-month is insignificant. Options is live but unvalidated (yfinance history too short) — its weight is a prior. See the 🧮 Methodology card for full detail.</p>
 </div>
 
 </div>
@@ -1514,9 +1516,10 @@ tr:hover td {{ background: #f8fafc; }}
 .score-narrative ul.pillars {{ margin: 0.55rem 0 0 0; padding-left: 1.1rem; }}
 .score-narrative ul.pillars li {{ font-size: 0.85rem; line-height: 1.5; margin-bottom: 0.2rem; }}
 .score-narrative ul.pillars li.muted {{ color: var(--text-muted); }}
-.book-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }}
-.book-grid h4 {{ margin: 0 0 0.4rem 0; font-size: 0.85rem; }}
-@media (max-width: 900px) {{ .book-grid {{ grid-template-columns: 1fr; }} }}
+.score-narrative .basis {{ color: var(--text-muted); font-size: 0.78rem; font-style: italic; }}
+.book-grid {{ display: grid; grid-template-columns: 1fr; gap: 1.5rem; }}
+.book-grid h4 {{ margin: 0 0 0.4rem 0; font-size: 0.9rem; }}
+.book-grid table {{ width: 100%; }}
 .chart-card-label {{ font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 500; }}
 .spark-6m {{ display: block; width: 100%; max-width: 700px; height: auto; }}
 .stat {{ background: #f8fafc; padding: 0.625rem; border-radius: 6px; text-align: center; }}
@@ -1582,7 +1585,7 @@ tr:hover td {{ background: #f8fafc; }}
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>Data as of <b>{asof}</b> {freshness_html} · rendered {generated_at} · {kpi_total} TMT names · <b>V1.15</b> (Pos 0.50 / Tech 0.15 / Opt 0.35; positioning = short interest + insider flow + float-turnover crowding) · Validated at <b>1-month, factor-neutral</b>: IC <b>−0.021</b> (t −3.2, +7.5%/yr decile L/S) · see Backtest tab for method</div>
+<div class=subtitle>Data as of <b>{asof}</b> {freshness_html} · rendered {generated_at} · {kpi_total} TMT names · <b>V1.15</b> (Pos 0.50 / Tech 0.15 / Opt 0.35; positioning = short interest + insider flow + float-turnover crowding) · <b>1-month factor-neutral</b> IC <b>−0.021</b> in-sample / <b>−0.012</b> out-of-sample (t −1.8) · weak signal, see Backtest tab</div>
 </div>
 </header>
 
@@ -1695,11 +1698,11 @@ tr:hover td {{ background: #f8fafc; }}
 <summary><b>Methodology</b></summary>
 <div style="max-width:850px;line-height:1.6;color:var(--text-muted);font-size:0.8125rem;padding-top:0.5rem;">
 <p><b>Universe</b>: 366 TMT names (mcap ≥ $1.5B) drawn from theme_detector.</p>
-<p><b>Signals</b>: 18 daily signals — 13 in composite, 5 overlay-only. Inclusion driven by backtest IC sign (positive IC = trend, excluded from contrarian composite).</p>
-<p><b>Dual percentile</b>: each signal ranked vs (a) own 5y trailing history and (b) full TMT universe cross-section (V1.8+). Bucket scores average those.</p>
-<p><b>Composite</b>: weighted average of bucket scores. Reweighted when buckets are missing. Min 2 buckets required for a temperature reading.</p>
-<p><b>Backtest</b>: 10y daily panel. IC = Spearman correlation between signal percentile and forward return. V1.9 composite (Pos 0.45 / Tech 0.25 / Opt 0.30) IC <b>−0.031</b> at 3m fwd, decile spread <b>−3.81%</b>, bot decile hit <b>57%</b>. Options bucket added V1.7 (yfinance forward-only) and has no backtest history yet. Within-bucket signal weights computed empirically from IC (<code>tools/tune_signal_weights.py</code>). V1.8 changed pct_peer from cluster-relative to universe-wide ranking — cluster-relative was suppressing cluster-wide moves. V1.9 inverted options signals (P/C, skew, term slope, IV rank) to contrarian direction, bumped options weight from 0.15 → 0.30. Late/wash flags simplified to Temp ≥ 85 / ≤ 15 (V1.9). See data/backtest_report.md.</p>
-<p><b>Limitations</b>: options bucket not implemented (Polygon $200/mo would unlock). ETF flows forward-only. EPS revisions live snapshot only. NASDAQ true SI covers only NASDAQ-listed names (~65% of universe). 13F has 45-day reporting lag and is long-only.</p>
+<p><b>Signals</b>: ~27 daily signals — 15 in the composite, the rest overlay-only. Inclusion driven by backtest IC sign (positive IC = trend-following, excluded from the contrarian composite).</p>
+<p><b>Percentile basis (important)</b>: <b>technical</b> signals are ranked vs the stock's <b>own 5-yr history only</b>; <b>positioning &amp; options</b> signals are a <b>50/50 blend</b> of own-5yr-history and the full TMT universe cross-section. So a technical percentile answers "extended vs its own norm?" while a positioning/options percentile blends "vs itself" and "vs peers." Bucket scores are the (IC-weighted) average of their signals' percentiles.</p>
+<p><b>Composite</b>: weighted average of bucket scores (Pos 0.50 / Tech 0.15 / Opt 0.35), reweighted when a bucket is missing.</p>
+<p><b>Backtest (V1.15)</b>: <b>1-month, factor-neutral, non-overlapping</b>. In-sample IC <b>−0.021</b> (t −3.2). Walk-forward <b>out-of-sample IC −0.012</b> (t −1.8): the rank signal partially survives (~60% of in-sample) but is weak/borderline, and the decile long/short does <b>not</b> hold out-of-sample (the +7.5%/yr was in-sample optimism). 3-month is insignificant. Weights tuned to this horizon (<code>tools/tune_weights_1m.py</code>, <code>tools/bucket_weight_scan.py</code>; OOS via <code>tools/walk_forward.py</code>). Options has no backtest history — its weight is a prior. See the 🧮 Methodology card.</p>
+<p><b>Limitations</b>: options bucket is live but unvalidated (no historical options data). Float uses a current snapshot across history (mild look-ahead). ETF flows + EPS revisions are forward-only. 13F has a 45-day lag and is long-only.</p>
 </div>
 </details>
 

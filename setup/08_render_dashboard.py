@@ -435,6 +435,64 @@ def _render_bucket_chart(series: list) -> str:
     """
 
 
+def _ord(n) -> str:
+    """Ordinal string: 1->1st, 22->22nd, 13->13th."""
+    n = int(round(n))
+    suf = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suf}"
+
+
+def render_model_book(snap: pd.DataFrame) -> str:
+    """Candidate contrarian book: the temperature decile extremes — where the
+    validated +7.5%/yr factor-neutral long/short spread actually lives. Bottom
+    decile (washed-out) = candidate LONGS; top decile (crowded) = candidate
+    SHORTS/avoids. Meant to be traded market/sector-neutral; a screen, not advice."""
+    d = snap.dropna(subset=["temperature"]).copy()
+    if d.empty:
+        return "<div class=panel><p class=empty>No composite data.</p></div>"
+    n = len(d)
+    lo_cut, hi_cut = d["temperature"].quantile(0.10), d["temperature"].quantile(0.90)
+    longs = d[d["temperature"] <= lo_cut].sort_values("temperature").head(25)
+    shorts = d[d["temperature"] >= hi_cut].sort_values("temperature", ascending=False).head(25)
+
+    def rows(df):
+        out = []
+        for _, r in df.iterrows():
+            chg = r.get("temp_7d_chg")
+            chg_str = f"{chg:+.1f}" if pd.notna(chg) else "—"
+            out.append(
+                f"<tr data-ticker='{r['ticker']}'>"
+                f"<td><a href='#t-{r['ticker']}' class=ticker-pill onclick=\"showTab('detail')\">{r['ticker']}</a></td>"
+                f"<td class=name>{(r.get('name') or '')[:34]}</td>"
+                f"<td class=mono>{r.get('cluster_id') or '—'}</td>"
+                f"<td class='num temp {temp_class(r['temperature'])}'>{fmt(r['temperature'])}</td>"
+                f"<td class=num>{fmt(r.get('score_positioning'))}</td>"
+                f"<td class=num>{fmt(r.get('score_technical'))}</td>"
+                f"<td class=num>{fmt(r.get('score_options'))}</td>"
+                f"<td class=num>{chg_str}</td></tr>")
+        return "".join(out)
+
+    head = ("<tr><th>Ticker</th><th>Name</th><th>Cluster</th><th class=num>Temp</th>"
+            "<th class=num>Pos</th><th class=num>Tech</th><th class=num>Opt</th><th class=num>7d Δ</th></tr>")
+    return f"""
+    <div class=panel>
+      <h3>📕 Model book — candidate contrarian basket</h3>
+      <p class=hint>The composite's measured edge is the <b>decile long/short</b> (+7.5%/yr, factor-neutral at 1 month), not the raw gradient — so this is the part that backtested. <b>Bottom-decile</b> (most washed-out) = candidate <b>longs</b>; <b>top-decile</b> (most crowded) = candidate <b>shorts / avoids</b>. Designed to be held <b>market- and sector-neutral</b> (balance $ and clusters across the two sides). This is a <b>screen, not advice</b> — pair with fundamentals, and remember the signal is weak (combine, don't trade standalone).</p>
+      <div class=book-grid>
+        <div>
+          <h4 class=chg-up>🟢 Candidate longs — washed-out (bottom decile, temp ≤ {lo_cut:.0f})</h4>
+          <div class=table-wrap><table class=rank><thead>{head}</thead><tbody>{rows(longs)}</tbody></table></div>
+        </div>
+        <div>
+          <h4 class=chg-down>🔴 Candidate shorts / avoids — crowded (top decile, temp ≥ {hi_cut:.0f})</h4>
+          <div class=table-wrap><table class=rank><thead>{head}</thead><tbody>{rows(shorts)}</tbody></table></div>
+        </div>
+      </div>
+      <p class=hint>Showing the {len(longs)} coldest and {len(shorts)} hottest of {n} names (decile ≈ {n // 10} each).</p>
+    </div>
+    """
+
+
 def render_score_narrative(snap_row, sig_long) -> str:
     """Plain-language, rule-based summary of a ticker's score — what it reads and
     what's driving it. Deterministic (no LLM): composed from the temperature,
@@ -475,21 +533,23 @@ def render_score_narrative(snap_row, sig_long) -> str:
         else:
             drivers = f"Driven mostly by {label[hi[0]]} at {hi[1]:.0f}."
 
-    sig_bits = []
+    comp = pd.DataFrame()
     if sig_long is not None and not sig_long.empty:
         df = sig_long.copy()
         df["dual"] = df[["pct_self", "pct_peer"]].mean(axis=1)
         comp = df[df["bucket"].isin(["positioning", "technical", "options"])].dropna(subset=["dual"])
-        if not comp.empty:
-            hot = comp.nlargest(1, "dual").iloc[0]
-            cold = comp.nsmallest(1, "dual").iloc[0]
 
-            def lbl(sn):
-                return SIGNAL_DESCRIPTIONS.get(sn, (sn, ""))[0]
-            if hot["dual"] >= 70:
-                sig_bits.append(f"hottest is {lbl(hot['signal_name'])} ({hot['dual']:.0f}th %ile)")
-            if cold["dual"] <= 30:
-                sig_bits.append(f"coldest is {lbl(cold['signal_name'])} ({cold['dual']:.0f}th %ile)")
+    def lbl(sn):
+        return SIGNAL_DESCRIPTIONS.get(sn, (sn, ""))[0]
+
+    sig_bits = []
+    if not comp.empty:
+        hot = comp.nlargest(1, "dual").iloc[0]
+        cold = comp.nsmallest(1, "dual").iloc[0]
+        if hot["dual"] >= 70:
+            sig_bits.append(f"hottest is {lbl(hot['signal_name'])} ({_ord(hot['dual'])} %ile)")
+        if cold["dual"] <= 30:
+            sig_bits.append(f"coldest is {lbl(cold['signal_name'])} ({_ord(cold['dual'])} %ile)")
 
     flag_bits = []
     if snap_row.get("flag_divergence") == 1:
@@ -514,7 +574,41 @@ def render_score_narrative(snap_row, sig_long) -> str:
     if conv_txt:
         parts.append(conv_txt)
     body = " ".join(p for p in parts if p)
-    return f'<div class="score-narrative"><h4>📝 In a nutshell</h4><p>{body}</p></div>'
+
+    # Per-pillar color: one line each for positioning / technical / options
+    interp = {
+        "positioning": ("crowded — heavy short or long-side positioning", "light / uncrowded (few shorts, low churn)"),
+        "technical": ("extended / strong momentum", "weak / washed-out price action"),
+        "options": ("rich — fear/skew or call euphoria", "calm / complacent"),
+    }
+    col_name = {"positioning": "score_positioning", "technical": "score_technical", "options": "score_options"}
+    pillar_rows = []
+    for bname in ["positioning", "technical", "options"]:
+        score = snap_row.get(col_name[bname])
+        if score is None or pd.isna(score):
+            if bname == "options":
+                pillar_rows.append('<li class=muted><b>Options sentiment</b> — no options data for this name yet.</li>')
+            continue
+        lead = interp[bname][0] if score >= 55 else interp[bname][1] if score <= 45 else "middling"
+        bits = ""
+        if not comp.empty:
+            bdf = comp[comp["bucket"] == bname].copy()
+            if not bdf.empty:
+                bdf["dist"] = (bdf["dual"] - 50).abs()
+                top = bdf.sort_values("dist", ascending=False).head(2)
+                sb = []
+                for _, r in top.iterrows():
+                    dd = r["dual"]
+                    word = "high" if dd >= 60 else "low" if dd <= 40 else "mid"
+                    sb.append(f"{lbl(r['signal_name'])} {word} ({_ord(dd)})")
+                if sb:
+                    bits = " — " + ", ".join(sb)
+        pillar_rows.append(
+            f'<li><b>{label[bname].capitalize()} {score:.0f} ({desc(score)})</b> — {lead}{bits}.</li>')
+    pillars_html = f'<ul class=pillars>{"".join(pillar_rows)}</ul>' if pillar_rows else ""
+
+    return (f'<div class="score-narrative"><h4>📝 In a nutshell</h4>'
+            f'<p>{body}</p>{pillars_html}</div>')
 
 
 def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
@@ -1417,6 +1511,12 @@ tr:hover td {{ background: #f8fafc; }}
 .score-narrative {{ background: #eff6ff; border-left: 3px solid var(--primary); border-radius: 6px; padding: 0.6rem 0.9rem; margin-bottom: 1rem; }}
 .score-narrative h4 {{ margin: 0 0 0.3rem 0; font-size: 0.8rem; color: var(--text-muted); }}
 .score-narrative p {{ margin: 0; font-size: 0.9rem; line-height: 1.45; }}
+.score-narrative ul.pillars {{ margin: 0.55rem 0 0 0; padding-left: 1.1rem; }}
+.score-narrative ul.pillars li {{ font-size: 0.85rem; line-height: 1.5; margin-bottom: 0.2rem; }}
+.score-narrative ul.pillars li.muted {{ color: var(--text-muted); }}
+.book-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }}
+.book-grid h4 {{ margin: 0 0 0.4rem 0; font-size: 0.85rem; }}
+@media (max-width: 900px) {{ .book-grid {{ grid-template-columns: 1fr; }} }}
 .chart-card-label {{ font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 500; }}
 .spark-6m {{ display: block; width: 100%; max-width: 700px; height: auto; }}
 .stat {{ background: #f8fafc; padding: 0.625rem; border-radius: 6px; text-align: center; }}
@@ -1516,6 +1616,7 @@ tr:hover td {{ background: #f8fafc; }}
 <button class=tab data-tab=movers onclick=showTab('movers')>📈 Movers</button>
 <button class=tab data-tab=flags onclick=showTab('flags')>🚩 Flags</button>
 <button class=tab data-tab=watchlist onclick=showTab('watchlist')>👁️ Watchlist ({len(watchlist_df)})</button>
+<button class=tab data-tab=book onclick=showTab('book')>📕 Book</button>
 <button class=tab data-tab=backtest onclick=showTab('backtest')>📈 Backtest</button>
 <button class=tab data-tab=detail onclick=showTab('detail')>🔍 Detail (per-ticker)</button>
 </div>
@@ -1569,6 +1670,10 @@ tr:hover td {{ background: #f8fafc; }}
 
 <div class="tab-content" id=tab-watchlist>
 {render_summary_table(watchlist_df, f"👁️ Watchlist ({len(watchlist_df)})", "Tickers in your watchlist table.", "(empty — add via SQL: INSERT INTO watchlist (ticker, label, added_at) VALUES ('NVDA', 'core', date('now')))")}
+</div>
+
+<div class="tab-content" id=tab-book>
+{render_model_book(snap)}
 </div>
 
 <div class="tab-content" id=tab-backtest>

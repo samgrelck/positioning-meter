@@ -437,58 +437,77 @@ def _render_bucket_chart(series: list) -> str:
 
 
 def render_live_performance() -> str:
-    """Realized (not backtest) forward performance of the logged decile book.
-    Reads book_log, computes 21-day market-neutral long/short returns on
-    non-overlapping matured cohorts. Accumulates real out-of-sample evidence."""
+    """Forward-only (genuine out-of-sample) performance of the logged decile book,
+    headlined; in-sample backfill shown separately as context only. Realized 21-day
+    market-neutral long/short on non-overlapping matured cohorts."""
     H = 21
     conn = connect()
-    bl = pd.read_sql_query("SELECT date,ticker,side FROM book_log", conn, parse_dates=["date"])
+    bl = pd.read_sql_query("SELECT date,ticker,side,source FROM book_log", conn, parse_dates=["date"])
     px = pd.read_sql_query("SELECT ticker,date,adj_close FROM prices", conn, parse_dates=["date"]).pivot(
         index="date", columns="ticker", values="adj_close").sort_index()
     conn.close()
-    if bl.empty:
-        return ('<div class=panel><h3>🔬 Live tracked performance</h3>'
-                '<p class=hint>No book logged yet — starts accumulating on the next refresh.</p></div>')
     fwd = px.shift(-H) / px - 1.0
     pos = {d: i for i, d in enumerate(px.index)}
-    cohort_dates = sorted(d for d in bl["date"].unique() if d in pos)
-    picked, last_i = [], -10 ** 9
-    for d in cohort_dates:
-        i = pos[d]
-        if i - last_i >= H and i + H < len(px.index):  # non-overlapping + matured
-            picked.append(d)
-            last_i = i
-    ls = []
-    for d in picked:
-        longs = bl[(bl.date == d) & (bl.side == "long")]["ticker"]
-        shorts = bl[(bl.date == d) & (bl.side == "short")]["ticker"]
-        lr = fwd.loc[d, fwd.columns.intersection(longs)].mean()
-        sr = fwd.loc[d, fwd.columns.intersection(shorts)].mean()
-        if pd.notna(lr) and pd.notna(sr):
-            ls.append(lr - sr)
-    n_logged = bl["date"].nunique()
-    if len(ls) < 2:
-        return (f'<div class=panel><h3>🔬 Live tracked performance (realized)</h3>'
-                f'<p class=hint>Accumulating — {n_logged} day(s) logged; each cohort needs ~{H} trading days '
-                f'to mature. Realized long/short results appear here as cohorts mature.</p></div>')
-    a = np.array(ls, float)
-    mean_ls, n = np.nanmean(a), int(np.isfinite(a).sum())
-    ann, hit = mean_ls * 12, float(np.mean(a > 0))
-    t = mean_ls / np.nanstd(a) * np.sqrt(n) if n > 1 else float("nan")
-    first, last = min(picked).strftime("%Y-%m-%d"), max(picked).strftime("%Y-%m-%d")
-    cls = "chg-up" if mean_ls > 0 else "chg-down"
+
+    def stats(sub):
+        cohort_dates = sorted(d for d in sub["date"].unique() if d in pos)
+        picked, last_i, ls = [], -10 ** 9, []
+        for d in cohort_dates:
+            i = pos[d]
+            if i - last_i >= H and i + H < len(px.index):  # non-overlapping + matured
+                longs = sub[(sub.date == d) & (sub.side == "long")]["ticker"]
+                shorts = sub[(sub.date == d) & (sub.side == "short")]["ticker"]
+                lr = fwd.loc[d, fwd.columns.intersection(longs)].mean()
+                sr = fwd.loc[d, fwd.columns.intersection(shorts)].mean()
+                if pd.notna(lr) and pd.notna(sr):
+                    ls.append(lr - sr)
+                    picked.append(d)
+                    last_i = i
+        if len(ls) < 2:
+            return None
+        a = np.array(ls, float)
+        m, n = np.nanmean(a), int(np.isfinite(a).sum())
+        return {"mean": m, "ann": m * 12, "hit": float(np.mean(a > 0)),
+                "t": m / np.nanstd(a) * np.sqrt(n) if n > 1 else float("nan"), "n": n,
+                "first": min(picked).strftime("%Y-%m-%d"), "last": max(picked).strftime("%Y-%m-%d")}
+
+    live = stats(bl[bl.source == "live"]) if not bl.empty else None
+    n_live_days = bl[bl.source == "live"]["date"].nunique() if not bl.empty else 0
+
+    # Headline: forward-only (genuine OOS)
+    if live:
+        s, cls = live, ("chg-up" if live["mean"] > 0 else "chg-down")
+        head = f"""
+      <p class=hint>Realized 21-day <b>market-neutral long/short</b> of the logged decile book (bottom-decile longs minus top-decile shorts) on <b>{s['n']} non-overlapping forward cohorts</b>, {s['first']} to {s['last']} — weights frozen, never fit on these returns. This is the genuine test.</p>
+      <table class=signals style="max-width:520px"><tbody>
+        <tr><td>Avg L/S per cohort (21d)</td><td class="num mono {cls}">{s['mean']:+.2%}</td></tr>
+        <tr><td>Annualized</td><td class="num mono {cls}">{s['ann']:+.1%}</td></tr>
+        <tr><td>Hit rate</td><td class="num mono">{s['hit']:.0%}</td></tr>
+        <tr><td>t-stat</td><td class="num mono">{s['t']:+.2f}</td></tr>
+        <tr><td>Forward cohorts</td><td class="num mono">{s['n']}</td></tr>
+      </tbody></table>"""
+    else:
+        head = (f'<p class=hint><b>Accumulating live, no results yet.</b> {n_live_days} forward day(s) logged; '
+                f'each cohort needs ~{H} trading days to mature, so genuine out-of-sample numbers start appearing '
+                f'about a month after launch and build from there. (This panel deliberately shows <em>only</em> '
+                f'forward-logged data — the in-sample history below is context, not validation.)</p>')
+
+    # Context only: in-sample backfill, clearly demoted
+    back = stats(bl[bl.source == "backfill"]) if not bl.empty else None
+    ctx = ""
+    if back:
+        ctx = (f'<p class=hint style="margin-top:0.5rem;border-top:1px solid var(--border);padding-top:0.5rem;">'
+               f'<b>In-sample context (not a track record):</b> applied to history ({back["n"]} cohorts, '
+               f'{back["first"]}–{back["last"]}) the current model\'s book returned {back["ann"]:+.1%}/yr '
+               f'market-neutral — but the weights were tuned on this period, so it\'s <em>optimistic and not '
+               f'out-of-sample</em>. The walk-forward (Methodology card) is the honest backtest; this live panel '
+               f'is the honest forward test.</p>')
+
     return f"""
     <div class=panel>
-      <h3>🔬 Live tracked performance (realized, not backtest)</h3>
-      <p class=hint>Actual realized 21-day <b>market-neutral long/short</b> return of the logged decile book (bottom-decile longs minus top-decile shorts), on <b>{n} non-overlapping cohorts</b>, {first} to {last}. <b>Backfilled from history</b> at launch (weights were tuned on this history, so the backfilled track is in-sample/optimistic); the genuinely-honest test is the <b>live-forward</b> portion that accumulates from launch onward with the weights frozen.</p>
-      <table class=signals style="max-width:520px"><tbody>
-        <tr><td>Avg L/S per cohort (21d)</td><td class="num mono {cls}">{mean_ls:+.2%}</td></tr>
-        <tr><td>Annualized</td><td class="num mono {cls}">{ann:+.1%}</td></tr>
-        <tr><td>Hit rate (cohorts positive)</td><td class="num mono">{hit:.0%}</td></tr>
-        <tr><td>t-stat</td><td class="num mono">{t:+.2f}</td></tr>
-        <tr><td>Matured cohorts</td><td class="num mono">{n}</td></tr>
-      </tbody></table>
-      <p class=hint>Market-neutral (long−short) realized returns of the <em>current</em> model; not sector/beta-neutralized like the backtest, so it can carry some sector tilt. Treat the backfilled history as context and the live-forward record as the real evidence; small samples are noisy.</p>
+      <h3>🔬 Live forward performance (out-of-sample only)</h3>
+      {head}
+      {ctx}
     </div>
     """
 

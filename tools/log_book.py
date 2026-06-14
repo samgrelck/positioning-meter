@@ -19,7 +19,7 @@ import pandas as pd
 from lib.db import connect, init_schema
 
 
-def deciles_for_date(conn, d):
+def deciles_for_date(conn, d, source):
     df = pd.read_sql_query(
         "SELECT ticker, temperature FROM composite_daily WHERE date=? AND temperature IS NOT NULL",
         conn, params=(d,))
@@ -28,9 +28,9 @@ def deciles_for_date(conn, d):
     lo, hi = df["temperature"].quantile(0.10), df["temperature"].quantile(0.90)
     rows = []
     for _, r in df[df["temperature"] <= lo].iterrows():
-        rows.append((d, r["ticker"], "long", float(r["temperature"])))
+        rows.append((d, r["ticker"], "long", float(r["temperature"]), source))
     for _, r in df[df["temperature"] >= hi].iterrows():
-        rows.append((d, r["ticker"], "short", float(r["temperature"])))
+        rows.append((d, r["ticker"], "short", float(r["temperature"]), source))
     return rows
 
 
@@ -44,12 +44,16 @@ def main():
     else:
         dates = [conn.execute("SELECT MAX(date) FROM composite_daily").fetchone()[0]]
     total = 0
+    source = "backfill" if backfill else "live"
     for d in dates:
         if not d:
             continue
-        rows = deciles_for_date(conn, d)
+        # never downgrade an existing 'live' row to 'backfill'
+        rows = [r for r in deciles_for_date(conn, d, source)
+                if source == "live" or not conn.execute(
+                    "SELECT 1 FROM book_log WHERE date=? AND ticker=? AND source='live'", (d, r[1])).fetchone()]
         conn.executemany(
-            "INSERT OR REPLACE INTO book_log (date, ticker, side, temperature) VALUES (?,?,?,?)", rows)
+            "INSERT OR REPLACE INTO book_log (date, ticker, side, temperature, source) VALUES (?,?,?,?,?)", rows)
         total += len(rows)
     conn.commit()
     n_dates = conn.execute("SELECT COUNT(DISTINCT date) FROM book_log").fetchone()[0]

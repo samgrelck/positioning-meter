@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS book_log (
     ticker      TEXT NOT NULL,
     side        TEXT NOT NULL,   -- 'long' (washed-out) | 'short' (crowded)
     temperature REAL,
+    source      TEXT NOT NULL DEFAULT 'live',  -- 'live' = genuine out-of-sample (logged forward); 'backfill' = in-sample history
     PRIMARY KEY (date, ticker)
 );
 

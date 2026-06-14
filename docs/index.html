@@ -331,7 +331,7 @@ tr:hover td { background: #f8fafc; }
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>Data as of <b>2026-06-12</b> <span class="freshness ok">2 days old</span> · rendered 2026-06-14 17:24 · 365 TMT names · <b>V1.17</b> (Pos 0.50 / Tech 0.20 / Opt 0.30; positioning = short interest + insider flow + float-turnover crowding) · <b>1-month factor-neutral</b> IC <b>−0.021</b> in-sample / <b>−0.011</b> out-of-sample (t −1.7) · weak signal, see Backtest tab</div>
+<div class=subtitle>Data as of <b>2026-06-12</b> <span class="freshness ok">2 days old</span> · rendered 2026-06-14 17:36 · 365 TMT names · <b>V1.17</b> (Pos 0.50 / Tech 0.20 / Opt 0.30; positioning = short interest + insider flow + float-turnover crowding) · <b>1-month factor-neutral</b> IC <b>−0.021</b> in-sample / <b>−0.011</b> out-of-sample (t −1.7) · weak signal, see Backtest tab</div>
 </div>
 </header>
 
@@ -1911,16 +1911,9 @@ tr:hover td { background: #f8fafc; }
 <div class="tab-content" id=tab-book>
 
     <div class=panel>
-      <h3>🔬 Live tracked performance (realized, not backtest)</h3>
-      <p class=hint>Actual realized 21-day <b>market-neutral long/short</b> return of the logged decile book (bottom-decile longs minus top-decile shorts), on <b>120 non-overlapping cohorts</b>, 2016-05-31 to 2026-05-08. <b>Backfilled from history</b> at launch (weights were tuned on this history, so the backfilled track is in-sample/optimistic); the genuinely-honest test is the <b>live-forward</b> portion that accumulates from launch onward with the weights frozen.</p>
-      <table class=signals style="max-width:520px"><tbody>
-        <tr><td>Avg L/S per cohort (21d)</td><td class="num mono chg-up">+0.69%</td></tr>
-        <tr><td>Annualized</td><td class="num mono chg-up">+8.3%</td></tr>
-        <tr><td>Hit rate (cohorts positive)</td><td class="num mono">57%</td></tr>
-        <tr><td>t-stat</td><td class="num mono">+1.89</td></tr>
-        <tr><td>Matured cohorts</td><td class="num mono">120</td></tr>
-      </tbody></table>
-      <p class=hint>Market-neutral (long−short) realized returns of the <em>current</em> model; not sector/beta-neutralized like the backtest, so it can carry some sector tilt. Treat the backfilled history as context and the live-forward record as the real evidence; small samples are noisy.</p>
+      <h3>🔬 Live forward performance (out-of-sample only)</h3>
+      <p class=hint><b>Accumulating live, no results yet.</b> 0 forward day(s) logged; each cohort needs ~21 trading days to mature, so genuine out-of-sample numbers start appearing about a month after launch and build from there. (This panel deliberately shows <em>only</em> forward-logged data — the in-sample history below is context, not validation.)</p>
+      <p class=hint style="margin-top:0.5rem;border-top:1px solid var(--border);padding-top:0.5rem;"><b>In-sample context (not a track record):</b> applied to history (120 cohorts, 2016-05-31–2026-05-08) the current model's book returned +6.4%/yr market-neutral — but the weights were tuned on this period, so it's <em>optimistic and not out-of-sample</em>. The walk-forward (Methodology card) is the honest backtest; this live panel is the honest forward test.</p>
     </div>
     
 

@@ -66,14 +66,29 @@ def main():
         if r is not None:
             neut[d] = r.dropna()
 
+    # per-bucket standalone 1m FN IC (how strong is each bucket on its own?)
+    def bucket_ic(panel):
+        ics = []
+        for d, fres in neut.items():
+            cols = fres.index.intersection(panel.columns)
+            a = panel.loc[d, cols].dropna()
+            common = a.index.intersection(fres.index)
+            if len(common) >= 40:
+                ics.append(a[common].corr(fres[common], method="spearman"))
+        ic = np.array(ics, float); n = np.isfinite(ic).sum()
+        return np.nanmean(ic), (np.nanmean(ic) / np.nanstd(ic) * np.sqrt(n) if n > 1 else np.nan)
+    print("Per-bucket standalone 1m FN IC (strength of each bucket alone):")
+    for lab, panel in [("positioning", P), ("technical", T), ("options", O)]:
+        ic, t = bucket_ic(panel)
+        print(f"  {lab:12} IC {ic:+.4f}  t {t:+.2f}")
+    print()
+
     scenarios = [
-        ("current  0.40/0.25/0.35", 0.40, 0.25, 0.35),
-        ("rec      0.50/0.15/0.35", 0.50, 0.15, 0.35),
-        ("tilt     0.55/0.15/0.30", 0.55, 0.15, 0.30),
-        ("aggr     0.60/0.10/0.30", 0.60, 0.10, 0.30),
-        ("pos-only 1.00/0.00/0.00", 1.00, 0.00, 0.00),
-        ("no-tech  0.60/0.00/0.40", 0.60, 0.00, 0.40),
-        ("no-opt   0.65/0.35/0.00", 0.65, 0.35, 0.00),
+        ("mine     0.60/0.15/0.25", 0.60, 0.15, 0.25),
+        ("yours    0.50/0.20/0.30", 0.50, 0.20, 0.30),
+        ("mid      0.55/0.20/0.25", 0.55, 0.20, 0.25),
+        ("v1.15    0.50/0.15/0.35", 0.50, 0.15, 0.35),
+        ("flatter  0.45/0.25/0.30", 0.45, 0.25, 0.30),
     ]
     print(f"1-month, factor-neutral, non-overlapping. {len(neut)} periods. (contrarian: IC negative, L/S positive)\n")
     print(f"{'scenario':26} {'IC':>9} {'t':>7} {'L/S ann':>9}")

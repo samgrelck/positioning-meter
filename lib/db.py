@@ -160,6 +160,18 @@ CREATE TABLE IF NOT EXISTS share_float (
     PRIMARY KEY (ticker, asof_date)
 );
 
+-- Daily decile "book" log for LIVE forward-performance tracking. Each refresh
+-- appends the bottom-decile (candidate longs) and top-decile (candidate shorts)
+-- by temperature; realized forward returns are computed later from prices, so
+-- this accumulates genuine out-of-sample evidence over time.
+CREATE TABLE IF NOT EXISTS book_log (
+    date        TEXT NOT NULL,
+    ticker      TEXT NOT NULL,
+    side        TEXT NOT NULL,   -- 'long' (washed-out) | 'short' (crowded)
+    temperature REAL,
+    PRIMARY KEY (date, ticker)
+);
+
 -- ============================================================
 -- COMPUTED SIGNAL TABLES (one row per ticker per date per signal)
 -- ============================================================

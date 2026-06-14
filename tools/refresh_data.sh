@@ -76,6 +76,8 @@ else
         echo "  ⚠️  DEPLOY FAILED (exit $deploy_rc)"
         FAILED+=("deploy")
     fi
+    # Log today's decile book for live forward-performance tracking (after 06 recomputed)
+    python3 tools/log_book.py 2>&1 | tail -1 || echo "  ⚠️  log_book failed"
 fi
 
 echo ""

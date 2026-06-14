@@ -27,7 +27,8 @@ H = 21              # 1-month forward horizon (trading days)
 EMBARGO = 2         # drop this many trailing sample-steps from train (gap to test)
 INIT_TRAIN = 36     # initial train size in sample-steps (~3 years of monthly samples)
 TEST_SIZE = 12      # test block size in sample-steps (~1 year)
-BW = {"positioning": 0.50, "technical": 0.15, "options": 0.35}
+import yaml as _yaml  # noqa: E402
+BW = _yaml.safe_load(open(project_path("config.yaml")))["composite"]["bucket_weights"]
 BUCKETS = {
     "technical": ["ret_1m", "ret_3m", "ret_6m", "dist_200ma", "rsi_14", "pct_from_52w_high"],
     "positioning": ["insider_net_90d_signed", "insider_buying_90d", "short_volume_ratio_14d",

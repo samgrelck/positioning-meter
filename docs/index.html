@@ -321,7 +321,7 @@ tr:hover td { background: #f8fafc; }
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>Data as of <b>2026-06-12</b> <span class="freshness ok">2 days old</span> · rendered 2026-06-14 15:16 · 361 TMT names · <b>V1.14</b> (Pos 0.40 / Tech 0.25 / Opt 0.35; positioning bucket = short interest + insider flow + float-turnover crowding) · Backtest IC <b>−0.023</b> at 3m fwd</div>
+<div class=subtitle>Data as of <b>2026-06-12</b> <span class="freshness ok">2 days old</span> · rendered 2026-06-14 15:27 · 361 TMT names · <b>V1.14</b> (Pos 0.40 / Tech 0.25 / Opt 0.35; positioning = short interest + insider flow + float-turnover crowding) · Validated at <b>1-month, factor-neutral</b>: IC <b>−0.018</b> (t −2.4) · see Backtest tab for method</div>
 </div>
 </header>
 
@@ -344,7 +344,7 @@ tr:hover td { background: #f8fafc; }
 
 <div class=gloss-card>
 <h4>Temperature (0–100)</h4>
-<p>The composite "how hot/late" score. Each signal is scored as a percentile, then within each bucket signals are weighted by their backtest IC (stronger contrarian signals dominate). Composite = <b>weighted average of buckets</b>: <b>positioning 0.45 + technical 0.25 + options 0.30</b>. Weights renormalize when a bucket is missing.</p><p><b>How percentiles are computed (V1.10):</b> Technical signals use <code>pct_self</code> only (vs own 5y history) — their cross-section component is trend-following and cancels the contrarian own-history signal. Positioning + options signals use 50/50 blend of <code>pct_self</code> and <code>pct_peer</code> (vs full TMT universe). <b>V1.10 backtest IC −0.040 at 3m fwd, bot decile hit 58%. Options bucket added in V1.7 (yfinance forward-only) — no backtest yet.</b></p>
+<p>The composite "how hot/late" score (0–100). Each signal is scored as a percentile, then within each bucket signals are weighted by their backtest IC. Composite = <b>weighted average of buckets</b>: <b>positioning 0.40 + technical 0.25 + options 0.35</b>, renormalized when a bucket is missing.</p><p><b>How percentiles are computed:</b> Technical signals use <code>pct_self</code> only (vs own 5y history); positioning + options use a 50/50 blend of <code>pct_self</code> and <code>pct_peer</code> (vs the full TMT universe). <b>Validated at the 1-month, factor-neutral horizon (IC −0.018, t −2.4) — full method, including why 1-month, is in the 🧮 Methodology card on the Backtest tab.</b></p>
 </div>
 
 <div class=gloss-card>
@@ -1885,6 +1885,38 @@ tr:hover td { background: #f8fafc; }
 </div>
 
 <div class="tab-content" id=tab-backtest>
+
+    <div class="panel" id="methodology">
+      <h3>🧮 How the score is built &amp; validated (V1.14)</h3>
+      <p class=hint>This is a contrarian <b>sentiment/positioning</b> score, not a price target — it pairs with fundamental work, it doesn't replace it.</p>
+
+      <h4>How Temperature (0–100) is computed</h4>
+      <ol class=method>
+        <li>Every signal is converted to a <b>percentile</b>, blended <b>50/50</b> between "vs the stock's own 5-year history" and "vs all TMT peers today." (Technical signals use own-history only — their cross-sectional component is trend-following and cancels the contrarian read.)</li>
+        <li>Signals are grouped into three <b>buckets</b>, each a weighted average of its signals:
+          <ul>
+            <li><b>Positioning &amp; crowding (40%)</b> — short interest (days-to-cover, short-volume), insider flow, and <b>float turnover</b> (20d volume ÷ free float — a long/retail-crowding proxy, ~50% of the bucket).</li>
+            <li><b>Technical (25%)</b> — 1/3/6m returns, RSI, distance from 200d MA, % from 52-week high.</li>
+            <li><b>Options (35%)</b> — IV rank, 25Δ skew, put/call ratio, term-structure slope.</li>
+          </ul>
+        </li>
+        <li>Temperature = weighted average of the buckets (re-normalized if a bucket has no data). High = crowded/stretched/late (contrarian-bearish); low = washed-out (contrarian-bullish).</li>
+        <li>Within-bucket weights come from each signal's backtested predictive power (|IC|), <b>except float turnover is deliberately pinned at ~50% of the positioning bucket</b> to recognize long/retail crowding — a judgment call, since its standalone statistical signal is weak but its read is economically sensible.</li>
+      </ol>
+
+      <h4>How it was validated — and why 1-month is the reference horizon</h4>
+      <p>We score the signal by <b>Information Coefficient</b> (rank correlation of Temperature with forward returns; for a contrarian signal, <b>negative is good</b>). Raw IC <em>understates</em> the edge because market/sector/beta moves dominate returns, so we measure against <b>factor-neutral residuals</b> (sector- and beta-stripped), using <b>non-overlapping periods</b> so the statistics aren't inflated by overlapping return windows.</p>
+      <table class=signals style="max-width:560px">
+        <thead><tr><th>Horizon</th><th class=num>Factor-neutral IC</th><th class=num>t-stat</th><th class=num>Decile long/short (ann.)</th></tr></thead>
+        <tbody>
+          <tr><td><b>1 month</b></td><td class="num mono chg-down">−0.018</td><td class="num mono">−2.4</td><td class="num mono chg-up">+1.7%/yr</td></tr>
+          <tr><td>3 month</td><td class="num mono">−0.005</td><td class="num mono">−0.4</td><td class="num mono chg-down">−4.3%/yr</td></tr>
+        </tbody>
+      </table>
+      <p>The contrarian edge is <b>concentrated at ~1 month</b>: borderline-significant (t ≈ −2.4) with a <b>+1.7%/yr</b> factor-neutral spread between the most-washed-out and most-crowded deciles. At 3 months it is <b>not significant and economically the wrong sign</b> — so we treat <b>1 month as the reference horizon</b>.</p>
+      <p class=hint><b>Honest read:</b> this is a <b>weak-but-real</b> signal, not a strong one. Earlier headline t-stats (≈ −11) were inflated by overlapping windows; corrected, the edge is modest. Use it for breadth (many names) and as one input alongside fundamentals — not as a standalone timing tool. Reproduce with <code>tools/factor_neutral_backtest.py</code>.</p>
+    </div>
+    
 
     <div class="panel" id="backtest-panel">
         <h3>📈 Backtest validation (V1.8)</h3>

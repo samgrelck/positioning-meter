@@ -114,6 +114,44 @@ def fm_ic(sig, px, cluster, beta, h, mode, deciles=False):
     return out
 
 
+def nonoverlap_stats(sig, px, cluster, beta, h, mode):
+    """Non-overlapping periods only (dates spaced h apart) so forward windows
+    don't overlap and the t-stat isn't inflated by serial correlation. Returns
+    IC mean + honest t-stat, plus the decile long/short spread per period and
+    annualized."""
+    fwd = px.shift(-h) / px - 1.0
+    idx = sig.index.intersection(fwd.index)
+    cols = sig.columns.intersection(fwd.columns)
+    sample = idx[::h]  # every h-th trading day -> non-overlapping forward windows
+    ics, ls = [], []
+    for d in sample:
+        s = sig.loc[d, cols]
+        f = fwd.loc[d, cols]
+        m = s.notna() & f.notna()
+        if m.sum() < 40:
+            continue
+        s2, f2 = s[m], f[m]
+        f2 = neutralize(f2, list(s2.index), cluster, beta, mode)
+        mm = f2.notna()
+        s2, f2 = s2[mm], f2[mm]
+        if len(s2) < 40:
+            continue
+        ics.append(s2.corr(f2, method="spearman"))
+        r = s2.rank(pct=True)
+        ls.append(f2[r <= 0.1].mean() - f2[r >= 0.9].mean())
+    ic = np.array(ics, float)
+    ls = np.array(ls, float)
+    n = np.isfinite(ic).sum()
+    per_yr = 252 / h
+    return {
+        "ic": np.nanmean(ic),
+        "t": np.nanmean(ic) / np.nanstd(ic) * np.sqrt(n) if n > 1 else np.nan,
+        "n": int(n),
+        "ls_per_period": np.nanmean(ls),
+        "ls_annual": np.nanmean(ls) * per_yr,
+    }
+
+
 def main():
     px, temp, ftp, cluster = load()
     beta = betas(px)
@@ -133,7 +171,17 @@ def main():
     print("\nFLOAT_TURNOVER_20d alone — does neutralization change its signal? (3m)")
     fr = fm_ic(ftp, px, cluster, beta, 63, "raw")
     ff = fm_ic(ftp, px, cluster, beta, 63, "full")
-    print(f"  raw IC {fr['ic']:+.4f}   full-neutral IC {ff['ic']:+.4f}  (t={ff['t']:+.2f})")
+    print(f"  raw IC {fr['ic']:+.4f}   full-neutral IC {ff['ic']:+.4f}  (overlapping t={ff['t']:+.2f}, inflated)")
+
+    # === Honest, non-overlapping stats (full-neutral composite) ===
+    print("\n" + "=" * 64)
+    print("NON-OVERLAPPING periods (honest t-stats + economic magnitude)")
+    print("full-neutral composite temperature")
+    print(f"{'horizon':8} {'IC':>9} {'t-stat':>8} {'periods':>8} {'L/S per pd':>11} {'L/S annual':>11}")
+    for hn, h in HORIZONS.items():
+        r = nonoverlap_stats(temp, px, cluster, beta, h, "full")
+        print(f"{hn:8} {r['ic']:>+9.4f} {r['t']:>+8.2f} {r['n']:>8} {r['ls_per_period']:>+11.4f} {r['ls_annual']:>+11.4f}")
+    print("L/S = bottom-decile minus top-decile mean residual return (contrarian: positive good).")
 
 
 if __name__ == "__main__":

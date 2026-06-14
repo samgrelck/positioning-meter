@@ -1476,13 +1476,17 @@ tr:hover td {{ background: #f8fafc; }}
 </div>
 
 <script>
-// Don't let the browser restore the prior scroll position on refresh.
-// The All Names table is injected after DOMContentLoaded, which shifts page
-// height and otherwise lands a reload at the very bottom. Start at the top
-// unless the URL points at a specific #t- ticker anchor.
+// On a genuine reload, always land at the top with the Overview tab — never
+// restore the prior scroll or jump to a #t- ticker anchor. Deep links (a fresh
+// visit to a #t-XXX URL) still honor the anchor.
+const NAV_TYPE = (performance.getEntriesByType('navigation')[0] || {{}}).type;
 if ('scrollRestoration' in history) {{ history.scrollRestoration = 'manual'; }}
 window.addEventListener('load', () => {{
-  if (!window.location.hash.startsWith('#t-')) window.scrollTo(0, 0);
+  if (NAV_TYPE === 'reload' || !window.location.hash.startsWith('#t-')) {{
+    if (window.location.hash) history.replaceState(null, '', window.location.pathname + window.location.search);
+    showTab('overview');
+    window.scrollTo(0, 0);
+  }}
 }});
 
 const CSV = {json.dumps(csv_text)};
@@ -1616,7 +1620,7 @@ window.addEventListener('hashchange', () => {{
     }}, 50);
   }}
 }});
-if (window.location.hash.startsWith('#t-')) {{
+if (NAV_TYPE !== 'reload' && window.location.hash.startsWith('#t-')) {{
   showTab('detail');
 }}
 

@@ -51,15 +51,15 @@ composite:
   # ratio while giving options meaningful weight.
   # Will refine once options accumulates enough history for backtest tuning.
   bucket_weights:
-    # V1.13: positioning-leaning per user direction (conceptual prior:
-    # positioning data is harder to fake / less reflexive than technicals;
-    # options is real-time institutional sentiment with skin in the game).
-    # Tech down-weighted because price-derived signals are reflexive
-    # (the very stock you're trying to predict).
-    # Acknowledges options has no backtest history yet (yfinance forward-only),
-    # so weights it slightly below positioning despite the conceptual case.
-    positioning: 0.40
-    technical: 0.25
+    # V1.15: evidence-tilted. At the 1-month, factor-neutral, non-overlapping
+    # horizon (tools/bucket_weight_scan.py), positioning is the only strongly-
+    # validated bucket (IC -0.023, t -3.8); technical is weak (t -1.1) but a SMALL
+    # weight still adds value (0.50/0.15/0.35 IC -0.0234 beats both 0.40/0.25/0.35
+    # at -0.0219 AND dropping technicals at -0.0211 — so keep it, downweighted).
+    # Options is UNMEASURABLE in-sample (yfinance history too short; the backtest
+    # can't distinguish any options weight) — 0.35 is a forward-looking prior.
+    positioning: 0.50
+    technical: 0.15
     options: 0.35
     flows: 0.00     # placeholder
     valuation: 0.00  # excluded — V1.5

@@ -435,6 +435,88 @@ def _render_bucket_chart(series: list) -> str:
     """
 
 
+def render_score_narrative(snap_row, sig_long) -> str:
+    """Plain-language, rule-based summary of a ticker's score — what it reads and
+    what's driving it. Deterministic (no LLM): composed from the temperature,
+    bucket scores, the most extreme signals, and the flags."""
+    t = snap_row.get("temperature")
+    if t is None or pd.isna(t):
+        return ""
+    if t >= 85:
+        head = "screening <b>extremely hot</b> — crowded and late-stage (contrarian-bearish)"
+    elif t >= 70:
+        head = "screening <b>hot</b> — crowded positioning (contrarian-bearish)"
+    elif t >= 55:
+        head = "leaning <b>warm</b>"
+    elif t > 45:
+        head = "roughly <b>neutral</b>"
+    elif t > 30:
+        head = "leaning <b>cool</b>"
+    elif t > 15:
+        head = "screening <b>cold</b> — washed-out (contrarian-bullish)"
+    else:
+        head = "screening <b>extremely cold</b> — deeply washed-out (contrarian-bullish)"
+
+    label = {"positioning": "positioning/crowding", "technical": "technicals", "options": "options sentiment"}
+    present = [(n, snap_row.get(c)) for n, c in
+              [("positioning", "score_positioning"), ("technical", "score_technical"), ("options", "score_options")]
+              if snap_row.get(c) is not None and not pd.isna(snap_row.get(c))]
+    present.sort(key=lambda x: x[1], reverse=True)
+
+    def desc(v):
+        return "hot" if v >= 70 else "elevated" if v >= 55 else "neutral" if v > 45 else "soft" if v > 30 else "cold"
+
+    drivers = ""
+    if present:
+        hi, lo = present[0], present[-1]
+        if len(present) >= 2 and (hi[1] - lo[1]) >= 25:
+            drivers = (f"It's a tug-of-war: {label[hi[0]]} {desc(hi[1])} ({hi[1]:.0f}) "
+                       f"vs {label[lo[0]]} {desc(lo[1])} ({lo[1]:.0f}).")
+        else:
+            drivers = f"Driven mostly by {label[hi[0]]} at {hi[1]:.0f}."
+
+    sig_bits = []
+    if sig_long is not None and not sig_long.empty:
+        df = sig_long.copy()
+        df["dual"] = df[["pct_self", "pct_peer"]].mean(axis=1)
+        comp = df[df["bucket"].isin(["positioning", "technical", "options"])].dropna(subset=["dual"])
+        if not comp.empty:
+            hot = comp.nlargest(1, "dual").iloc[0]
+            cold = comp.nsmallest(1, "dual").iloc[0]
+
+            def lbl(sn):
+                return SIGNAL_DESCRIPTIONS.get(sn, (sn, ""))[0]
+            if hot["dual"] >= 70:
+                sig_bits.append(f"hottest is {lbl(hot['signal_name'])} ({hot['dual']:.0f}th %ile)")
+            if cold["dual"] <= 30:
+                sig_bits.append(f"coldest is {lbl(cold['signal_name'])} ({cold['dual']:.0f}th %ile)")
+
+    flag_bits = []
+    if snap_row.get("flag_divergence") == 1:
+        flag_bits.append("price strength not confirmed by options (divergence)")
+    if snap_row.get("flag_late_signal") == 1:
+        flag_bits.append("late-signal (temp ≥ 85)")
+    if snap_row.get("flag_washout") == 1:
+        flag_bits.append("washout (temp ≤ 15)")
+    if snap_row.get("flag_earnings_soon") == 1:
+        flag_bits.append("earnings within ~2 weeks")
+
+    conv = snap_row.get("conviction")
+    conv_txt = ""
+    if conv is not None and not pd.isna(conv):
+        conv_txt = "Buckets broadly agree." if conv >= 66 else ("Signals are mixed (low conviction)." if conv <= 40 else "")
+
+    parts = [f"<b>{t:.0f}/100</b> — {head}.", drivers]
+    if sig_bits:
+        parts.append("Key signals: " + "; ".join(sig_bits) + ".")
+    if flag_bits:
+        parts.append("Flags: " + ", ".join(flag_bits) + ".")
+    if conv_txt:
+        parts.append(conv_txt)
+    body = " ".join(p for p in parts if p)
+    return f'<div class="score-narrative"><h4>📝 In a nutshell</h4><p>{body}</p></div>'
+
+
 def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
                      sparkline, chart_series, notes_row, sector_groups, cluster_mates, sector_mates,
                      bucket_series=None,
@@ -448,6 +530,7 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
         f'(Positioning / Technical / Options, 0–100)</div>{bucket_chart_svg}</div>'
         if bucket_chart_svg else ""
     )
+    narrative_html = render_score_narrative(snap_row, sig_long)
 
     spark_svg = ""
     if sparkline and len(sparkline) > 1:
@@ -711,6 +794,7 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
             <div class=stat><span class=stat-label>Anom</span><span class=stat-val>{fmt(snap_row.get('anomaly_count'), 0)}</span></div>
             <div class=stat-spark>{spark_svg}</div>
         </div>
+        {narrative_html}
         <div class=chart-card>
             <div class=chart-card-label>📈 Temperature, last 6 months (red zone ≥70 = hot, green zone ≤30 = cold)</div>
             {_render_6m_chart(chart_series)}
@@ -787,13 +871,13 @@ def render_methodology_card() -> str:
         <li>Every signal is converted to a <b>percentile</b>, blended <b>50/50</b> between "vs the stock's own 5-year history" and "vs all TMT peers today." (Technical signals use own-history only — their cross-sectional component is trend-following and cancels the contrarian read.)</li>
         <li>Signals are grouped into three <b>buckets</b>, each a weighted average of its signals:
           <ul>
-            <li><b>Positioning &amp; crowding (40%)</b> — short interest (days-to-cover, short-volume), insider flow, and <b>float turnover</b> (20d volume ÷ free float — a long/retail-crowding proxy, ~50% of the bucket).</li>
-            <li><b>Technical (25%)</b> — 1/3/6m returns, RSI, distance from 200d MA, % from 52-week high.</li>
+            <li><b>Positioning &amp; crowding (50%)</b> — short interest (days-to-cover, short-volume), insider flow, and <b>float turnover</b> (20d volume ÷ free float — a long/retail-crowding proxy that earns ~28% of the bucket on its own 1-month merit).</li>
+            <li><b>Technical (15%)</b> — 1/3/6m returns, RSI, distance from 200d MA, % from 52-week high.</li>
             <li><b>Options (35%)</b> — IV rank, 25Δ skew, put/call ratio, term-structure slope.</li>
           </ul>
         </li>
         <li>Temperature = weighted average of the buckets (re-normalized if a bucket has no data). High = crowded/stretched/late (contrarian-bearish); low = washed-out (contrarian-bullish).</li>
-        <li>Within-bucket weights come from each signal's backtested predictive power (|IC|), <b>except float turnover is deliberately pinned at ~50% of the positioning bucket</b> to recognize long/retail crowding — a judgment call, since its standalone statistical signal is weak but its read is economically sensible.</li>
+        <li>Within-bucket weights come from each signal's <b>1-month factor-neutral IC</b>; trend-following (wrong-signed) signals get zero. Across-bucket weights tilt to positioning — the only bucket strongly validated in-sample — with a small technical weight (which still adds value) and options held as a forward-looking prior (its history is too short to backtest).</li>
       </ol>
 
       <h4>How it was validated — and why 1-month is the reference horizon</h4>
@@ -801,11 +885,11 @@ def render_methodology_card() -> str:
       <table class=signals style="max-width:560px">
         <thead><tr><th>Horizon</th><th class=num>Factor-neutral IC</th><th class=num>t-stat</th><th class=num>Decile long/short (ann.)</th></tr></thead>
         <tbody>
-          <tr><td><b>1 month</b></td><td class="num mono chg-down">−0.018</td><td class="num mono">−2.4</td><td class="num mono chg-up">+1.7%/yr</td></tr>
-          <tr><td>3 month</td><td class="num mono">−0.005</td><td class="num mono">−0.4</td><td class="num mono chg-down">−4.3%/yr</td></tr>
+          <tr><td><b>1 month</b></td><td class="num mono chg-down">−0.021</td><td class="num mono">−3.2</td><td class="num mono chg-up">+7.5%/yr</td></tr>
+          <tr><td>3 month</td><td class="num mono">−0.016</td><td class="num mono">−1.7</td><td class="num mono chg-up">+2.9%/yr</td></tr>
         </tbody>
       </table>
-      <p>The contrarian edge is <b>concentrated at ~1 month</b>: borderline-significant (t ≈ −2.4) with a <b>+1.7%/yr</b> factor-neutral spread between the most-washed-out and most-crowded deciles. At 3 months it is <b>not significant and economically the wrong sign</b> — so we treat <b>1 month as the reference horizon</b>.</p>
+      <p>The contrarian edge is <b>concentrated at ~1 month</b>: significant (t ≈ −3.2) with a <b>+7.5%/yr</b> factor-neutral spread between the most-washed-out and most-crowded deciles. At 3 months it's weaker and not significant — so we treat <b>1 month as the reference horizon</b>. (Within-bucket weights and the 0.50/0.15/0.35 bucket split were both tuned to this 1-month, factor-neutral target via <code>tools/tune_weights_1m.py</code> and <code>tools/bucket_weight_scan.py</code>.)</p>
       <p class=hint><b>Honest read:</b> this is a <b>weak-but-real</b> signal, not a strong one. Earlier headline t-stats (≈ −11) were inflated by overlapping windows; corrected, the edge is modest. Use it for breadth (many names) and as one input alongside fundamentals — not as a standalone timing tool. Reproduce with <code>tools/factor_neutral_backtest.py</code>.</p>
     </div>
     """
@@ -880,7 +964,7 @@ def render_glossary() -> str:
 
 <div class=gloss-card>
 <h4>Temperature (0–100)</h4>
-<p>The composite "how hot/late" score (0–100). Each signal is scored as a percentile, then within each bucket signals are weighted by their backtest IC. Composite = <b>weighted average of buckets</b>: <b>positioning 0.40 + technical 0.25 + options 0.35</b>, renormalized when a bucket is missing.</p><p><b>How percentiles are computed:</b> Technical signals use <code>pct_self</code> only (vs own 5y history); positioning + options use a 50/50 blend of <code>pct_self</code> and <code>pct_peer</code> (vs the full TMT universe). <b>Validated at the 1-month, factor-neutral horizon (IC −0.018, t −2.4) — full method, including why 1-month, is in the 🧮 Methodology card on the Backtest tab.</b></p>
+<p>The composite "how hot/late" score (0–100). Each signal is scored as a percentile, then within each bucket signals are weighted by their backtest IC. Composite = <b>weighted average of buckets</b>: <b>positioning 0.50 + technical 0.15 + options 0.35</b>, renormalized when a bucket is missing.</p><p><b>How percentiles are computed:</b> Technical signals use <code>pct_self</code> only (vs own 5y history); positioning + options use a 50/50 blend of <code>pct_self</code> and <code>pct_peer</code> (vs the full TMT universe). <b>Validated at the 1-month, factor-neutral horizon (IC −0.021, t −3.2) — full method, including why 1-month, is in the 🧮 Methodology card on the Backtest tab.</b></p>
 </div>
 
 <div class=gloss-card>
@@ -1330,6 +1414,9 @@ tr:hover td {{ background: #f8fafc; }}
 .tag-earnings {{ display: inline-block; background: #fef3c7; color: #92400e; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-top: 0.4rem; }}
 .drilldown-stats {{ display: grid; grid-template-columns: repeat(5, 1fr) auto; gap: 0.625rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); align-items: center; }}
 .chart-card {{ background: #f8fafc; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; }}
+.score-narrative {{ background: #eff6ff; border-left: 3px solid var(--primary); border-radius: 6px; padding: 0.6rem 0.9rem; margin-bottom: 1rem; }}
+.score-narrative h4 {{ margin: 0 0 0.3rem 0; font-size: 0.8rem; color: var(--text-muted); }}
+.score-narrative p {{ margin: 0; font-size: 0.9rem; line-height: 1.45; }}
 .chart-card-label {{ font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 500; }}
 .spark-6m {{ display: block; width: 100%; max-width: 700px; height: auto; }}
 .stat {{ background: #f8fafc; padding: 0.625rem; border-radius: 6px; text-align: center; }}
@@ -1395,7 +1482,7 @@ tr:hover td {{ background: #f8fafc; }}
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>Data as of <b>{asof}</b> {freshness_html} · rendered {generated_at} · {kpi_total} TMT names · <b>V1.14</b> (Pos 0.40 / Tech 0.25 / Opt 0.35; positioning = short interest + insider flow + float-turnover crowding) · Validated at <b>1-month, factor-neutral</b>: IC <b>−0.018</b> (t −2.4) · see Backtest tab for method</div>
+<div class=subtitle>Data as of <b>{asof}</b> {freshness_html} · rendered {generated_at} · {kpi_total} TMT names · <b>V1.15</b> (Pos 0.50 / Tech 0.15 / Opt 0.35; positioning = short interest + insider flow + float-turnover crowding) · Validated at <b>1-month, factor-neutral</b>: IC <b>−0.021</b> (t −3.2, +7.5%/yr decile L/S) · see Backtest tab for method</div>
 </div>
 </header>
 

@@ -210,13 +210,15 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
     # below), which also keeps raw_value as the real buying $ for display.
     INVERT_PCT = {"insider_buying_90d"}
 
-    # V1.10: For TECHNICAL signals only — use pct_self alone, NOT the blend.
-    # Empirical finding: technical signals are contrarian at the OWN-HISTORY
-    # level (pct_self IC negative) but trend-following at the cross-sectional
-    # level (pct_peer IC positive). The 50/50 blend cancels them out.
-    # Positioning + options signals work in BOTH dimensions, keep the blend.
+    # V1.16: composite TECHNICAL signals now use the 50/50 own-history + universe
+    # blend (like positioning/options). The V1.10 own-history-only rule was a 3m,
+    # pre-factor-neutral artifact — once returns are factor-neutralized the
+    # cross-sectional component is CONTRARIAN (reversion), not trend-following, and
+    # walk-forward OOS confirmed the blend beats own-history-only (IC -0.0192 vs
+    # -0.0178; tools/wf_techbasis.py). Only the overlay-only trend signals (12m
+    # return, RS vs QQQ/XLK) stay own-history — they're display overlays, not in
+    # the composite, and are genuinely trend-following cross-sectionally.
     TECH_USE_SELF_ONLY = {
-        "ret_1m", "ret_3m", "ret_6m", "dist_200ma", "rsi_14", "pct_from_52w_high",
         "ret_12m", "rs_vs_qqq_3m", "rs_vs_xlk_3m",
     }
 

@@ -444,7 +444,7 @@ def _ord(n) -> str:
 
 def render_model_book(snap: pd.DataFrame) -> str:
     """Candidate contrarian book: the temperature decile extremes — where the
-    validated +7.5%/yr factor-neutral long/short spread actually lives. Bottom
+    factor-neutral long/short spread is measured (modest in-sample, unreliable out-of-sample). Bottom
     decile (washed-out) = candidate LONGS; top decile (crowded) = candidate
     SHORTS/avoids. Meant to be traded market/sector-neutral; a screen, not advice."""
     d = snap.dropna(subset=["temperature"]).copy()
@@ -477,7 +477,7 @@ def render_model_book(snap: pd.DataFrame) -> str:
     return f"""
     <div class=panel>
       <h3>📕 Model book — candidate contrarian basket</h3>
-      <p class=hint>The temperature decile extremes: <b>bottom-decile</b> (most washed-out) = candidate <b>longs</b>; <b>top-decile</b> (most crowded) = candidate <b>shorts / avoids</b>, meant to be viewed market/sector-neutral (balance $ and clusters across the two sides). <b>Important caveat:</b> the decile long/short was +7.5%/yr <em>in-sample</em> but <b>did NOT hold out-of-sample</b> in walk-forward testing (noisy, slightly negative) — so this is an <b>idea-generation screen, not a strategy and not advice</b>. The underlying rank signal is weak; pair with fundamentals and don't trade these lists standalone.</p>
+      <p class=hint>The temperature decile extremes: <b>bottom-decile</b> (most washed-out) = candidate <b>longs</b>; <b>top-decile</b> (most crowded) = candidate <b>shorts / avoids</b>, meant to be viewed market/sector-neutral (balance $ and clusters across the two sides). <b>Important caveat:</b> the decile long/short was modestly positive <em>in-sample</em> (~+4%/yr) but is <b>unreliable out-of-sample</b> in walk-forward testing (noisy, ~flat, swings widely with the sample) — so this is an <b>idea-generation screen, not a strategy and not advice</b>. The underlying rank signal is weak; pair with fundamentals and don't trade these lists standalone.</p>
       <div class=book-grid>
         <div>
           <h4 class=chg-up>🟢 Candidate longs — washed-out (bottom decile, temp ≤ {lo_cut:.0f})</h4>
@@ -603,7 +603,7 @@ def render_score_narrative(snap_row, sig_long) -> str:
                     sb.append(f"{lbl(r['signal_name'])} {word} ({_ord(dd)})")
                 if sb:
                     bits = " — " + ", ".join(sb)
-        basis = "%iles vs own 5-yr history" if bname == "technical" else "%iles blend own-history + TMT peers"
+        basis = "%iles: 50/50 own 5-yr history + TMT universe"
         pillar_rows.append(
             f'<li><b>{label[bname].capitalize()} {score:.0f} ({desc(score)})</b> — {lead}{bits} '
             f'<span class=basis>({basis})</span>.</li>')
@@ -956,15 +956,15 @@ def _render_decile_bars(decile_means: dict, label: str = "") -> str:
 
 def render_methodology_card() -> str:
     """Plain-language explanation of how Temperature is computed and how it was
-    validated — so the score is transparent, not a black box (V1.15)."""
+    validated — so the score is transparent, not a black box (V1.16)."""
     return """
     <div class="panel" id="methodology">
-      <h3>🧮 How the score is built &amp; validated (V1.15)</h3>
+      <h3>🧮 How the score is built &amp; validated (V1.16)</h3>
       <p class=hint>This is a contrarian <b>sentiment/positioning</b> score, not a price target — it pairs with fundamental work, it doesn't replace it.</p>
 
       <h4>How Temperature (0–100) is computed</h4>
       <ol class=method>
-        <li>Every signal is converted to a <b>percentile</b>, blended <b>50/50</b> between "vs the stock's own 5-year history" and "vs all TMT peers today." (Technical signals use own-history only — their cross-sectional component is trend-following and cancels the contrarian read.)</li>
+        <li>Every signal is converted to a <b>percentile</b>, blended <b>50/50</b> between "vs the stock's own 5-year history" and "vs all TMT peers today" — the same basis for all three buckets (V1.16; technicals previously used own-history only, but walk-forward showed the 50/50 blend generalizes better once returns are factor-neutralized).</li>
         <li>Signals are grouped into three <b>buckets</b>, each a weighted average of its signals:
           <ul>
             <li><b>Positioning &amp; crowding (50%)</b> — short interest (days-to-cover, short-volume), insider flow, and <b>float turnover</b> (20d volume ÷ free float — a long/retail-crowding proxy that earns ~28% of the bucket on its own 1-month merit).</li>
@@ -981,11 +981,11 @@ def render_methodology_card() -> str:
       <table class=signals style="max-width:640px">
         <thead><tr><th>1-month, factor-neutral</th><th class=num>IC</th><th class=num>t-stat</th><th class=num>Decile L/S (ann.)</th></tr></thead>
         <tbody>
-          <tr><td><b>In-sample</b> (weights tuned on same data)</td><td class="num mono chg-down">−0.021</td><td class="num mono">−3.2</td><td class="num mono chg-up">+7.5%/yr</td></tr>
-          <tr><td><b>Out-of-sample</b> (walk-forward)</td><td class="num mono chg-down">−0.012</td><td class="num mono">−1.8</td><td class="num mono chg-down">−1.8%/yr</td></tr>
+          <tr><td><b>In-sample</b> (weights tuned on same data)</td><td class="num mono chg-down">−0.021</td><td class="num mono">−3.7</td><td class="num mono chg-up">+4%/yr</td></tr>
+          <tr><td><b>Out-of-sample</b> (walk-forward)</td><td class="num mono chg-down">−0.012</td><td class="num mono">−1.9</td><td class="num mono">~flat</td></tr>
         </tbody>
       </table>
-      <p>1 month beats 3 months (3m IC is weak/insignificant), so it's the reference horizon. Weights were tuned to this 1-month factor-neutral target (<code>tools/tune_weights_1m.py</code>, <code>tools/bucket_weight_scan.py</code>). <b>But the in-sample numbers are optimistic.</b> A proper <b>walk-forward test</b> (tune on past, measure on held-out future; <code>tools/walk_forward.py</code>) shows the rank IC <b>partially survives</b> out-of-sample (−0.012, t −1.8, ~60% of in-sample, borderline-significant) — but the <b>decile long/short does NOT hold out of sample</b> (noisy, slightly negative pooled). The +7.5%/yr was in-sample optimism.</p>
+      <p>1 month beats 3 months (3m IC is weak/insignificant), so it's the reference horizon. Weights were tuned to this 1-month factor-neutral target (<code>tools/tune_weights_1m.py</code>, <code>tools/bucket_weight_scan.py</code>). <b>But the in-sample numbers are optimistic.</b> A proper <b>walk-forward test</b> (tune on past, measure on held-out future; <code>tools/walk_forward.py</code>) shows the rank IC <b>partially survives</b> out-of-sample (−0.012, t −1.9, ~60% of in-sample, borderline-significant) — but the <b>decile long/short is unreliable out of sample</b> (noisy, roughly flat, swings widely with the sample). The rank IC is the more stable read; the L/S is not tradeable.</p>
       <p class=hint><b>Honest read:</b> a <b>weak</b> rank signal that partially generalizes, not a tradeable standalone strategy. Use it for breadth and as <b>one input alongside fundamentals / idea-generation</b> — do not trade the decile spread on its own. (Earlier headline t-stats ≈ −11 were inflated by overlapping windows; corrected and out-of-sample, the edge is modest.)</p>
     </div>
     """
@@ -1060,7 +1060,7 @@ def render_glossary() -> str:
 
 <div class=gloss-card>
 <h4>Temperature (0–100)</h4>
-<p>The composite "how hot/late" score (0–100). Each signal is scored as a percentile, then within each bucket signals are weighted by their backtest IC. Composite = <b>weighted average of buckets</b>: <b>positioning 0.50 + technical 0.15 + options 0.35</b>, renormalized when a bucket is missing.</p><p><b>How percentiles are computed:</b> Technical signals use <code>pct_self</code> only (vs own 5y history); positioning + options use a 50/50 blend of <code>pct_self</code> and <code>pct_peer</code> (vs the full TMT universe). <b>Validated at the 1-month, factor-neutral horizon (IC −0.021, t −3.2) — full method, including why 1-month, is in the 🧮 Methodology card on the Backtest tab.</b></p>
+<p>The composite "how hot/late" score (0–100). Each signal is scored as a percentile, then within each bucket signals are weighted by their backtest IC. Composite = <b>weighted average of buckets</b>: <b>positioning 0.50 + technical 0.15 + options 0.35</b>, renormalized when a bucket is missing.</p><p><b>How percentiles are computed:</b> every composite signal (all three buckets, V1.16) is a 50/50 blend of <code>pct_self</code> (vs own 5y history) and <code>pct_peer</code> (vs the full TMT universe). <b>Validated at the 1-month, factor-neutral horizon (in-sample IC −0.021, t −3.7; out-of-sample −0.012, t −1.9) — full method, including why 1-month, is in the 🧮 Methodology card on the Backtest tab.</b></p>
 </div>
 
 <div class=gloss-card>
@@ -1105,8 +1105,8 @@ def render_glossary() -> str:
 </div>
 
 <div class=gloss-card>
-<h4>Backtest validation (V1.15)</h4>
-<p><b>1-month, factor-neutral</b>: in-sample IC <b>−0.021</b> (t −3.2); <b>walk-forward out-of-sample IC −0.012</b> (t −1.8) — the rank signal partially survives but is weak/borderline, and the decile long/short did <b>not</b> hold out-of-sample. Treat as idea-generation, not a standalone strategy. 3-month is insignificant. Options is live but unvalidated (yfinance history too short) — its weight is a prior. See the 🧮 Methodology card for full detail.</p>
+<h4>Backtest validation (V1.16)</h4>
+<p><b>1-month, factor-neutral</b>: in-sample IC <b>−0.021</b> (t −3.7); <b>walk-forward out-of-sample IC −0.012</b> (t −1.9) — the rank signal partially survives but is weak/borderline, and the decile long/short is unreliable out-of-sample (noisy, ~flat). Treat as idea-generation, not a standalone strategy. 3-month is insignificant. Options is live but unvalidated (yfinance history too short) — its weight is a prior. See the 🧮 Methodology card for full detail.</p>
 </div>
 
 </div>
@@ -1585,7 +1585,7 @@ tr:hover td {{ background: #f8fafc; }}
 <header class=app-header>
 <div class=container>
 <h1>Positioning Meter</h1>
-<div class=subtitle>Data as of <b>{asof}</b> {freshness_html} · rendered {generated_at} · {kpi_total} TMT names · <b>V1.15</b> (Pos 0.50 / Tech 0.15 / Opt 0.35; positioning = short interest + insider flow + float-turnover crowding) · <b>1-month factor-neutral</b> IC <b>−0.021</b> in-sample / <b>−0.012</b> out-of-sample (t −1.8) · weak signal, see Backtest tab</div>
+<div class=subtitle>Data as of <b>{asof}</b> {freshness_html} · rendered {generated_at} · {kpi_total} TMT names · <b>V1.16</b> (Pos 0.50 / Tech 0.15 / Opt 0.35; positioning = short interest + insider flow + float-turnover crowding) · <b>1-month factor-neutral</b> IC <b>−0.021</b> in-sample / <b>−0.012</b> out-of-sample (t −1.9) · weak signal, see Backtest tab</div>
 </div>
 </header>
 
@@ -1699,9 +1699,9 @@ tr:hover td {{ background: #f8fafc; }}
 <div style="max-width:850px;line-height:1.6;color:var(--text-muted);font-size:0.8125rem;padding-top:0.5rem;">
 <p><b>Universe</b>: 366 TMT names (mcap ≥ $1.5B) drawn from theme_detector.</p>
 <p><b>Signals</b>: ~27 daily signals — 15 in the composite, the rest overlay-only. Inclusion driven by backtest IC sign (positive IC = trend-following, excluded from the contrarian composite).</p>
-<p><b>Percentile basis (important)</b>: <b>technical</b> signals are ranked vs the stock's <b>own 5-yr history only</b>; <b>positioning &amp; options</b> signals are a <b>50/50 blend</b> of own-5yr-history and the full TMT universe cross-section. So a technical percentile answers "extended vs its own norm?" while a positioning/options percentile blends "vs itself" and "vs peers." Bucket scores are the (IC-weighted) average of their signals' percentiles.</p>
+<p><b>Percentile basis</b>: every composite signal (all three buckets, V1.16) is a <b>50/50 blend</b> of the stock's own-5yr-history rank and its rank vs the full TMT universe today — so each percentile blends "extended vs its own norm?" with "extended vs peers right now?". Bucket scores are the (IC-weighted) average of their signals' percentiles.</p>
 <p><b>Composite</b>: weighted average of bucket scores (Pos 0.50 / Tech 0.15 / Opt 0.35), reweighted when a bucket is missing.</p>
-<p><b>Backtest (V1.15)</b>: <b>1-month, factor-neutral, non-overlapping</b>. In-sample IC <b>−0.021</b> (t −3.2). Walk-forward <b>out-of-sample IC −0.012</b> (t −1.8): the rank signal partially survives (~60% of in-sample) but is weak/borderline, and the decile long/short does <b>not</b> hold out-of-sample (the +7.5%/yr was in-sample optimism). 3-month is insignificant. Weights tuned to this horizon (<code>tools/tune_weights_1m.py</code>, <code>tools/bucket_weight_scan.py</code>; OOS via <code>tools/walk_forward.py</code>). Options has no backtest history — its weight is a prior. See the 🧮 Methodology card.</p>
+<p><b>Backtest (V1.16)</b>: <b>1-month, factor-neutral, non-overlapping</b>. In-sample IC <b>−0.021</b> (t −3.7). Walk-forward <b>out-of-sample IC −0.012</b> (t −1.9): the rank signal partially survives (~60% of in-sample) but is weak/borderline; the decile long/short is unreliable out-of-sample (noisy, ~flat). 3-month is insignificant. Weights tuned to this horizon (<code>tools/tune_weights_1m.py</code>, <code>tools/bucket_weight_scan.py</code>; OOS via <code>tools/walk_forward.py</code>). Options has no backtest history — its weight is a prior. See the 🧮 Methodology card.</p>
 <p><b>Limitations</b>: options bucket is live but unvalidated (no historical options data). Float uses a current snapshot across history (mild look-ahead). ETF flows + EPS revisions are forward-only. 13F has a 45-day lag and is long-only.</p>
 </div>
 </details>

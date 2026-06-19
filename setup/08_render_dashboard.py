@@ -1149,30 +1149,61 @@ def render_methodology_card(vs: dict) -> str:
     """
 
 
-def render_backtest_card(results: list) -> str:
+def render_backtest_card(results: list, signal_weights=None, signal_to_bucket=None,
+                         bucket_weights=None) -> str:
     if not results:
         return ""
+    signal_weights = signal_weights or {}
+    signal_to_bucket = signal_to_bucket or {}
+    bucket_weights = bucket_weights or {}
+
+    # Each signal's MODEL weight = its share of Temperature = (within-bucket weight,
+    # normalized) × (the bucket's weight in the composite). This is the actual basis
+    # the model is built on (within-bucket weights come from 1-month factor-neutral IC).
+    bucket_sum = {}
+    for sig, w in signal_weights.items():
+        b = signal_to_bucket.get(sig)
+        if b:
+            bucket_sum[b] = bucket_sum.get(b, 0.0) + w
+
+    def model_wt(sig):
+        w = signal_weights.get(sig, 0.0)
+        b = signal_to_bucket.get(sig)
+        if not b or not bucket_sum.get(b):
+            return 0.0
+        return (w / bucket_sum[b]) * bucket_weights.get(b, 0.0)
+
     composite = [r for r in results if r["signal"] == "COMPOSITE_TEMPERATURE"]
     sig_results = [r for r in results if r["signal"] != "COMPOSITE_TEMPERATURE"]
 
-    # Best row per signal
+    # Pin to the 1-MONTH horizon (the model horizon), picking the stronger of the
+    # two percentile bases (pct_self / pct_peer) for the raw-shape visualization.
     by_sig = {}
     for r in sig_results:
+        if r.get("horizon") != "1m":
+            continue
         s = r["signal"]
-        if s not in by_sig or (r.get("ic") is not None and abs(r["ic"]) > abs(by_sig[s].get("ic") or 0)):
+        if s not in by_sig or abs(r.get("ic") or 0) > abs(by_sig[s].get("ic") or 0):
             by_sig[s] = r
 
+    # Sort by model weight (most important signals first), then |IC|.
+    ordered = sorted(by_sig.keys(),
+                     key=lambda x: (model_wt(x), abs(by_sig[x].get("ic") or 0)), reverse=True)
     sig_rows = []
-    for s in sorted(by_sig.keys(), key=lambda x: abs(by_sig[x].get("ic") or 0), reverse=True)[:14]:
+    for s in ordered:
         r = by_sig[s]
         ic = r.get("ic")
         ic_str = f"{ic:+.4f}" if ic is not None else "—"
         ic_cls = "chg-down" if (ic is not None and ic < 0) else ("chg-up" if ic is not None and ic > 0 else "")
+        mw = model_wt(s)
+        mw_str = f"{mw * 100:.1f}%" if mw > 0 else '<span class=muted>not used</span>'
+        bkt = (signal_to_bucket.get(s) or "—").capitalize()
         bars = _render_decile_bars(r.get("decile_means", {}))
         sig_rows.append(f"""
             <tr>
                 <td class=mono>{s}</td>
-                <td class=mono>{r['kind']} @ {r['horizon']}</td>
+                <td>{bkt}</td>
+                <td class='num mono'>{mw_str}</td>
                 <td class='num mono {ic_cls}'>{ic_str}</td>
                 <td class=num>{r.get('top_hit_rate', 0):.1%}</td>
                 <td class=num>{r.get('bot_hit_rate', 0):.1%}</td>
@@ -1181,14 +1212,15 @@ def render_backtest_card(results: list) -> str:
         """)
 
     comp_rows = []
-    for r in composite:
+    for r in [c for c in composite if c.get("horizon") == "1m"] or composite:
         ic = r.get("ic")
         ic_cls = "chg-down" if ic and ic < 0 else "chg-up"
         bars = _render_decile_bars(r.get("decile_means", {}))
         comp_rows.append(f"""
-            <tr>
-                <td><b>Composite (raw, legacy)</b></td>
-                <td>{r['horizon']}</td>
+            <tr style="font-weight:600; border-bottom:2px solid var(--border)">
+                <td><b>Composite Temperature</b></td>
+                <td>all (1.00)</td>
+                <td class=num>100%</td>
                 <td class='num mono {ic_cls}'>{ic:+.4f}</td>
                 <td class=num>{r['top_hit_rate']:.1%}</td>
                 <td class=num>{r['bot_hit_rate']:.1%}</td>
@@ -1198,11 +1230,11 @@ def render_backtest_card(results: list) -> str:
 
     return f"""
     <div class="panel" id="backtest-panel">
-        <h3>📈 Per-signal IC (raw — legacy reference only, NOT the model horizon)</h3>
-        <p class=hint>⚠️ <b>The model is tuned and validated at 1 month</b> (factor-neutral) — see the 🧮 Methodology card above; nothing in this table drives any weight. This is a per-signal reference using <b>raw</b> (non-factor-neutral) IC at each signal's best-fitting horizon (shown in the "kind @ horizon" column, often 3m), kept only because the decile bars show each signal's shape. Information Coefficient (Spearman) per signal vs forward returns. <b class=chg-down>Negative IC</b> = contrarian (high signal → negative forward return). Bars: 10 left-to-right = bottom-decile (cold) → top-decile (hot); a working contrarian signal slopes <span class=chg-down>down-left</span> / <span class=chg-up>up-right</span>.</p>
+        <h3>📈 Per-signal model basis — 1-month horizon, ordered by model weight</h3>
+        <p class=hint><b>What the model is built on, signal by signal.</b> <b>Model weight</b> = each signal's share of the composite Temperature = (its weight within its bucket) × (the bucket's weight: Pos 0.50 / Tech 0.20 / Opt 0.30). Those within-bucket weights are set by each signal's <b>1-month, factor-neutral</b> IC (the validated horizon — composite in-sample/out-of-sample numbers are in the 🧮 Methodology card above). The <b>IC</b> and <b>decile bars</b> here are <b>raw 1-month</b> (not factor-neutral) — shown for the <em>shape</em> of each signal, so they won't line up exactly with the weights. <b class=chg-down>Negative IC</b> = contrarian (high reading → negative forward return). Bars: 10 left→right = bottom-decile (cold) → top-decile (hot); a working contrarian signal slopes <span class=chg-down>down-left</span> / <span class=chg-up>up-right</span>. Options signals show <span class=muted>not used</span> weight context where their history is too short to tune (equal-weighted prior). </p>
         <div class=table-wrap>
         <table class=signals>
-            <thead><tr><th>Signal</th><th>Best</th><th class=num>IC</th><th class=num>Top hit</th><th class=num>Bot hit</th><th>Decile spread (cold → hot)</th></tr></thead>
+            <thead><tr><th>Signal</th><th>Bucket</th><th class=num title="Share of the whole Temperature score">Model wt</th><th class=num title="Raw 1-month IC (Spearman), for shape">1m IC (raw)</th><th class=num>Top hit</th><th class=num>Bot hit</th><th>Decile spread (cold → hot)</th></tr></thead>
             <tbody>{''.join(comp_rows)}{''.join(sig_rows)}</tbody>
         </table>
         </div>
@@ -1777,7 +1809,7 @@ tr:hover td {{ background: #f8fafc; }}
 <button class=tab data-tab=allnames onclick=showTab('allnames')>📋 All Names ({kpi_total})</button>
 <button class=tab data-tab=movers onclick=showTab('movers')>📈 Movers</button>
 <button class=tab data-tab=flags onclick=showTab('flags')>🚩 Flags</button>
-<button class=tab data-tab=watchlist onclick=showTab('watchlist')>👁️ Watchlist ({len(watchlist_df)})</button>
+<button class=tab data-tab=watchlist onclick=showTab('watchlist')>👁️ Watchlist (<span id=watchCount>{len(watchlist_df)}</span>)</button>
 <button class=tab data-tab=book onclick=showTab('book')>📕 Book</button>
 <button class=tab data-tab=backtest onclick=showTab('backtest')>📈 Backtest</button>
 <button class=tab data-tab=detail onclick=showTab('detail')>🔍 Detail (per-ticker)</button>
@@ -1797,6 +1829,7 @@ tr:hover td {{ background: #f8fafc; }}
 <div class=table-wrap>
 <table id=allNamesTable class="rank sortable">
 <thead><tr>
+<th title="Star to add/remove from watchlist">★</th>
 <th data-sort=ticker>Ticker</th>
 <th data-sort=name>Name</th>
 <th class=num data-sort=temp>Temp</th>
@@ -1831,7 +1864,30 @@ tr:hover td {{ background: #f8fafc; }}
 </div>
 
 <div class="tab-content" id=tab-watchlist>
-{render_summary_table(watchlist_df, f"👁️ Watchlist ({len(watchlist_df)})", "Tickers in your watchlist table.", "(empty — add tickers with: python3 tools/watchlist.py add NVDA MU --label core)")}
+<div class=panel>
+<h3>👁️ Watchlist (<span id=watchCountPanel>0</span>)</h3>
+<p class=hint>Click the <b>☆</b> star on any ticker — in the table below, the <b>All Names</b> list, or a ticker's <b>Detail</b> card — to add or remove it here. Saved in this browser instantly; no code or SQL needed. Use <b>💾 Export Notes/Watchlist SQL</b> if you want it persisted to the database across devices.</p>
+<div id=watchEmpty class=hint style="padding:1rem 0">Nothing here yet — star a ticker (☆) anywhere to add it to your watchlist.</div>
+<div class=table-wrap>
+<table id=watchTable class=rank>
+<thead><tr>
+<th title="Star to add/remove">★</th>
+<th>Ticker</th>
+<th>Name</th>
+<th class=num>Temp</th>
+<th class=num>7d Δ</th>
+<th class=num>Pos</th>
+<th class=num>Tech</th>
+<th class=num>Opt</th>
+<th class=num>Conv</th>
+<th class=num>Anom</th>
+<th class=num title="Market cap ($B)">$B</th>
+<th>Flags</th>
+</tr></thead>
+<tbody></tbody>
+</table>
+</div>
+</div>
 </div>
 
 <div class="tab-content" id=tab-book>
@@ -1841,7 +1897,7 @@ tr:hover td {{ background: #f8fafc; }}
 
 <div class="tab-content" id=tab-backtest>
 {render_methodology_card(vs)}
-{render_backtest_card(data["backtest_results"])}
+{render_backtest_card(data["backtest_results"], signal_weights_for_dash, signal_to_bucket_for_dash, bucket_weights_for_dash)}
 </div>
 
 <div class="tab-content" id=tab-detail>
@@ -1886,6 +1942,48 @@ const CSV = {json.dumps(csv_text)};
 const SECTOR_TICKERS = {json.dumps(sg_ticker_map)};
 const ALL_NAMES = {json.dumps(all_names_data)};
 const TOTAL_NAMES = {len(snap)};
+const DB_WATCHLIST = {json.dumps(sorted(watchlist_df["ticker"].tolist()) if not watchlist_df.empty else [])};
+
+// Shared row renderer for the All Names + Watchlist tables (leading ☆ star cell).
+function rowHtml(r) {{
+  const fmt = (v, p) => v == null ? '—' : v.toFixed(p);
+  const tempCls = v => v == null ? '' : v >= 85 ? 'ext-hot' : v >= 70 ? 'hot' : v <= 15 ? 'ext-cold' : v <= 30 ? 'cold' : 'neutral';
+  return `
+    <tr data-ticker="${{r.ticker}}">
+      <td><button class=watch-toggle data-ticker="${{r.ticker}}" onclick="event.stopPropagation();toggleWatch('${{r.ticker}}')" title="Add/remove from watchlist">☆</button></td>
+      <td><a href="#t-${{r.ticker}}" class=ticker-pill onclick="showTab('detail')">${{r.ticker}}</a></td>
+      <td class=name>${{r.name}}</td>
+      <td class="num temp ${{tempCls(r.temp)}}">${{fmt(r.temp, 1)}}</td>
+      <td class="num ${{r.chg7d > 0 ? 'chg-up' : r.chg7d < 0 ? 'chg-down' : ''}}">${{r.chg7d == null ? '—' : (r.chg7d >= 0 ? '+' : '') + r.chg7d.toFixed(1)}}</td>
+      <td class=num>${{fmt(r.pos, 1)}}</td>
+      <td class=num>${{fmt(r.tech, 1)}}</td>
+      <td class=num>${{fmt(r.opt, 1)}}</td>
+      <td class="num conv">${{fmt(r.conv, 1)}}</td>
+      <td class="num anom">${{r.anom == null ? '—' : r.anom}}</td>
+      <td class=num>${{r.mcap_b == null ? '—' : '$' + r.mcap_b.toFixed(1)}}</td>
+      <td class=flagcol>${{r.late ? '🔥' : ''}}${{r.wash ? '❄️' : ''}}${{r.earn ? '📅' : ''}}</td>
+    </tr>`;
+}}
+
+// Watchlist tab is driven live by the browser watchlist (localStorage), seeded
+// once from the DB table so CLI/exported entries show up too.
+function seedWatchlistFromDB() {{
+  if (getWatchlist().length === 0 && DB_WATCHLIST.length) setWatchlist(DB_WATCHLIST.slice());
+}}
+function renderWatchlist() {{
+  const wl = new Set(getWatchlist());
+  const rows = ALL_NAMES.filter(r => wl.has(r.ticker))
+    .sort((a, b) => (b.temp == null ? -Infinity : b.temp) - (a.temp == null ? -Infinity : a.temp));
+  const tbody = document.querySelector('#watchTable tbody');
+  if (tbody) tbody.innerHTML = rows.map(rowHtml).join('');
+  const empty = document.getElementById('watchEmpty');
+  const tbl = document.getElementById('watchTable');
+  if (empty) empty.style.display = rows.length ? 'none' : 'block';
+  if (tbl) tbl.style.display = rows.length ? '' : 'none';
+  const n = String(rows.length);
+  ['watchCount', 'watchCountPanel'].forEach(id => {{ const e = document.getElementById(id); if (e) e.textContent = n; }});
+  applyWatchedStyling();
+}}
 
 // === Tabs ===
 function showTab(id) {{
@@ -1905,23 +2003,7 @@ function renderAllNames() {{
     if (typeof av === 'string') return allNamesSortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     return allNamesSortDir === 'asc' ? av - bv : bv - av;
   }});
-  const fmt = (v, p) => v == null ? '—' : v.toFixed(p);
-  const tempCls = v => v == null ? '' : v >= 85 ? 'ext-hot' : v >= 70 ? 'hot' : v <= 15 ? 'ext-cold' : v <= 30 ? 'cold' : 'neutral';
-  tbody.innerHTML = data.map(r => `
-    <tr data-ticker="${{r.ticker}}">
-      <td><a href="#t-${{r.ticker}}" class=ticker-pill onclick="showTab('detail')">${{r.ticker}}</a></td>
-      <td class=name>${{r.name}}</td>
-      <td class="num temp ${{tempCls(r.temp)}}">${{fmt(r.temp, 1)}}</td>
-      <td class="num ${{r.chg7d > 0 ? 'chg-up' : r.chg7d < 0 ? 'chg-down' : ''}}">${{r.chg7d == null ? '—' : (r.chg7d >= 0 ? '+' : '') + r.chg7d.toFixed(1)}}</td>
-      <td class=num>${{fmt(r.pos, 1)}}</td>
-      <td class=num>${{fmt(r.tech, 1)}}</td>
-      <td class=num>${{fmt(r.opt, 1)}}</td>
-      <td class="num conv">${{fmt(r.conv, 1)}}</td>
-      <td class="num anom">${{r.anom == null ? '—' : r.anom}}</td>
-      <td class=num>${{r.mcap_b == null ? '—' : '$' + r.mcap_b.toFixed(1)}}</td>
-      <td class=flagcol>${{r.late ? '🔥' : ''}}${{r.wash ? '❄️' : ''}}${{r.earn ? '📅' : ''}}</td>
-    </tr>
-  `).join('');
+  tbody.innerHTML = data.map(rowHtml).join('');
   // Update sort indicators
   document.querySelectorAll('#allNamesTable th').forEach(th => {{
     th.classList.remove('sorted-asc', 'sorted-desc');
@@ -2059,6 +2141,7 @@ function toggleWatch(t) {{
   }}
   setWatchlist(list);
   applyWatchedStyling();
+  renderWatchlist();
 }}
 function applyWatchedStyling() {{
   const watched = new Set(getWatchlist());
@@ -2127,7 +2210,9 @@ function exportNotes() {{
 // Init notes + watchlist + render All Names table after DOM is ready.
 // Render All Names eagerly so search works from any tab.
 document.addEventListener('DOMContentLoaded', () => {{
+  seedWatchlistFromDB();
   renderAllNames();
+  renderWatchlist();
   loadNotes();
   applyWatchedStyling();
 }});

@@ -64,6 +64,36 @@ def collect_issues():
         elif age > max_age:
             issues.append(f"{label}: {age}d old (last {mx}, expected ≤{max_age}d)")
 
+    # Per-ticker COVERAGE — catches a half-populated ingest that MAX(date) misses.
+    # On 2026-06-19 a stalled price pull updated only ~163 of 386 tickers to the
+    # latest date, yet MAX(date) was current, so every freshness check above passed
+    # while half the universe (incl. AMZN) silently sat 4 days stale. Here we flag
+    # when the latest date covers far fewer tickers than recent dates normally do.
+    for label, table in [("Prices", "prices"), ("Composite", "composite_daily")]:
+        try:
+            latest = c.execute(f"SELECT MAX(date) FROM {table}").fetchone()[0]
+            if latest is None:
+                continue
+            latest_n = c.execute(
+                f"SELECT COUNT(DISTINCT ticker) FROM {table} WHERE date=?", (latest,)
+            ).fetchone()[0]
+            # Baseline = max distinct-ticker count over the last ~15 dates (full universe size).
+            baseline = c.execute(
+                f"""SELECT MAX(cnt) FROM (
+                        SELECT COUNT(DISTINCT ticker) AS cnt FROM {table}
+                        WHERE date IN (SELECT DISTINCT date FROM {table} ORDER BY date DESC LIMIT 15)
+                        GROUP BY date
+                    )"""
+            ).fetchone()[0] or 0
+            if baseline and latest_n < 0.90 * baseline:
+                pct = 100 * latest_n / baseline
+                issues.append(
+                    f"{label} coverage: latest {latest} has only {latest_n}/{baseline} tickers "
+                    f"({pct:.0f}% — likely a partial/stalled ingest; re-run setup/02_ingest_prices.py)"
+                )
+        except Exception as e:
+            issues.append(f"{label} coverage: query failed ({e})")
+
     # 13F completeness — latest quarter should have a full filer set, not just
     # the handful of early filers you get if the ingest ran before the deadline.
     try:

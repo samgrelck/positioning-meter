@@ -654,7 +654,10 @@ def render_score_narrative(snap_row, sig_long) -> str:
 
     # Per-pillar color: one line each for positioning / technical / options
     interp = {
-        "positioning": ("crowded — heavy short or long-side positioning", "light / uncrowded (few shorts, low churn)"),
+        # Cold phrases describe the SHORT/insider side only — float-turnover (churn)
+        # is a separate sub-signal that can diverge, so it's surfaced explicitly below
+        # rather than asserted here (avoids "low churn" when churn is actually high).
+        "positioning": ("crowded — heavy short- or long-side positioning", "light short-side positioning (few shorts / low insider selling)"),
         "technical": ("extended / strong momentum", "weak / washed-out price action"),
         "options": ("rich — fear/skew or call euphoria", "calm / complacent"),
     }
@@ -671,15 +674,25 @@ def render_score_narrative(snap_row, sig_long) -> str:
         if not comp.empty:
             bdf = comp[comp["bucket"] == bname].copy()
             if not bdf.empty:
-                bdf["dist"] = (bdf["dual"] - 50).abs()
-                top = bdf.sort_values("dist", ascending=False).head(2)
+                hot_one = bdf[bdf["dual"] >= 70].nlargest(1, "dual")
+                cold_one = bdf[bdf["dual"] <= 30].nsmallest(1, "dual")
+                diverges = not hot_one.empty and not cold_one.empty
+                if diverges:
+                    # Bucket has both a hot and a cold signal — always show one of each
+                    # so a divergent signal (e.g. high churn inside a cold bucket) is visible.
+                    picks = pd.concat([hot_one, cold_one])
+                else:
+                    bdf["dist"] = (bdf["dual"] - 50).abs()
+                    picks = bdf.sort_values("dist", ascending=False).head(2)
                 sb = []
-                for _, r in top.iterrows():
+                for _, r in picks.iterrows():
                     dd = r["dual"]
                     word = "high" if dd >= 60 else "low" if dd <= 40 else "mid"
                     sb.append(f"{lbl(r['signal_name'])} {word} ({_ord(dd)})")
                 if sb:
                     bits = " — " + ", ".join(sb)
+                if diverges:
+                    bits += ' <b class=chg-down>(signals diverge)</b>'
         basis = "%iles: 50/50 own 5-yr history + TMT universe"
         pillar_rows.append(
             f'<li><b>{label[bname].capitalize()} {score:.0f} ({desc(score)})</b> — {lead}{bits} '
@@ -779,6 +792,7 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
 
         # Effective weights after renormalization for missing buckets
         total_w = sum(w for _, _, w in buckets_present) or 1.0
+        bucket_raw_w = {b: w for b, _, w in buckets_present}
         bucket_rows = []
         for bkt, score, raw_w in buckets_present:
             eff_w = raw_w / total_w
@@ -800,8 +814,10 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
                 bkt_sigs = sig_long[sig_long["bucket"] == bkt].copy()
                 if bkt_sigs.empty:
                     continue
-                # Each signal's contribution to its bucket = signal_weight × dual_pct
-                rows = []
+                # Pass 1: collect the signals actually present today + total weight,
+                # so we can show each signal's NORMALIZED share of the bucket and its
+                # effective share of the whole composite (within-bucket × bucket weight).
+                present = []  # (sn, dual, sw)
                 total_sw = 0
                 weighted_total = 0
                 for _, sr in bkt_sigs.iterrows():
@@ -820,35 +836,76 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
                     sw = signal_weights.get(sn, 1.0)
                     if dual is None:
                         continue
+                    present.append((sn, dual, sw))
                     total_sw += sw
                     weighted_total += sw * dual
-                    label = SIGNAL_DESCRIPTIONS.get(sn, (sn, ""))[0]
-                    rows.append(f"""
+
+                if present and total_sw > 0:
+                    final_bkt = weighted_total / total_sw
+                    eff_bw = bucket_raw_w.get(bkt, 0.0) / total_w  # bucket's share of composite
+
+                    def _read(d):
+                        # dual percentiles are temperature-oriented (high = pushes HOT),
+                        # so HOT/COLD here is direction-safe for every signal.
+                        if d >= 70:
+                            return ('<span class=chg-down><b>HOT</b></span>', 'hot')
+                        if d <= 30:
+                            return ('<span class=chg-up><b>COLD</b></span>', 'cold')
+                        return ('<span class=muted>neutral</span>', 'neutral')
+
+                    # Pass 2: build rows now that total_sw / eff_bw are known
+                    rows = []
+                    hot_n = cold_n = 0
+                    for sn, dual, sw in present:
+                        in_bucket = sw / total_sw            # share of THIS bucket (sums to 1)
+                        comp_wt = in_bucket * eff_bw          # share of the whole Temperature
+                        label = SIGNAL_DESCRIPTIONS.get(sn, (sn, ""))[0]
+                        read_html, read_kind = _read(dual)
+                        hot_n += read_kind == "hot"
+                        cold_n += read_kind == "cold"
+                        rows.append(f"""
                         <tr>
                             <td>{label}</td>
                             <td class="num mono">{dual:.1f}</td>
-                            <td class="num mono">{sw:.3f}</td>
+                            <td>{read_html}</td>
+                            <td class="num mono">{in_bucket * 100:.1f}%</td>
+                            <td class="num mono">{comp_wt * 100:.1f}%</td>
                             <td class="num mono">{(sw * dual):.2f}</td>
                         </tr>
-                    """)
-                if rows and total_sw > 0:
-                    final_bkt = weighted_total / total_sw
+                        """)
+                    net_word = ("hot" if final_bkt >= 70 else "warm" if final_bkt >= 55
+                                else "neutral" if final_bkt > 45 else "cool" if final_bkt > 30 else "cold")
                     rows.append(f"""
                         <tr style="border-top:2px solid var(--border); font-weight:600">
-                            <td>Σ (bucket score)</td>
+                            <td>Σ ({bkt} bucket)</td>
                             <td class="num mono">{final_bkt:.1f}</td>
-                            <td class="num mono">{total_sw:.3f}</td>
+                            <td>{net_word}</td>
+                            <td class="num mono">100%</td>
+                            <td class="num mono">{eff_bw * 100:.1f}%</td>
                             <td class="num mono">{weighted_total:.2f}</td>
                         </tr>
                     """)
+                    nsig = len(present)
+                    # Plain-language read of the bucket, incl. internal divergence
+                    summary = f"Nets <b>{final_bkt:.0f} ({net_word})</b> — {hot_n} hot, {cold_n} cold"
+                    if nsig - hot_n - cold_n:
+                        summary += f", {nsig - hot_n - cold_n} neutral"
+                    summary += f" of {nsig} signal{'s' if nsig != 1 else ''}."
+                    if hot_n and cold_n:
+                        summary += (" <b class=chg-down>⚠ Signals diverge</b> — the net score "
+                                    "averages out genuine disagreement; check the HOT vs COLD rows below.")
                     per_signal_html += f"""
                         <details>
-                        <summary><b>{bkt.capitalize()} bucket — signal weights from IC</b></summary>
+                        <summary><b>{bkt.capitalize()} bucket — {eff_bw * 100:.0f}% of composite — {nsig} signal{'s' if nsig != 1 else ''}</b></summary>
+                        <p class=hint style="margin:.3em 0 .5em">{summary}</p>
+                        <p class=hint style="margin:.3em 0 .5em"><b>Read</b> = HOT (≥70th, pushes temperature up / crowded-late) vs COLD (≤30th, washed-out). <b>Wt in bucket</b> = share of the {bkt} bucket (from 1-month factor-neutral IC; sums to 100%). <b>Composite wt</b> = Wt in bucket × {eff_bw * 100:.0f}% = share of the whole Temperature.</p>
                         <table class=signals>
                             <thead><tr>
                                 <th>Signal</th>
                                 <th class=num>Dual %ile</th>
-                                <th class=num title="Weight from |IC| at 1m fwd (factor-neutral), normalized within bucket">Sig weight</th>
+                                <th title="HOT ≥70th pushes temperature up; COLD ≤30th pulls it down. Hover the signal name for what it measures.">Read</th>
+                                <th class=num title="This signal's share within its bucket (sums to 100% across the bucket)">Wt in bucket</th>
+                                <th class=num title="Wt in bucket × bucket's weight in composite = share of the whole Temperature">Composite wt</th>
                                 <th class=num>Contribution</th>
                             </tr></thead>
                             <tbody>{''.join(rows)}</tbody>
@@ -1141,8 +1198,8 @@ def render_backtest_card(results: list) -> str:
 
     return f"""
     <div class="panel" id="backtest-panel">
-        <h3>📈 Per-signal IC (raw, 3-month — legacy reference)</h3>
-        <p class=hint><b>The validated, current numbers are in the 🧮 Methodology card above</b> (1-month, factor-neutral). This table is a per-signal reference using <b>raw</b> (non-factor-neutral) 3-month IC, kept because the decile bars show each signal's shape. Information Coefficient (Spearman) per signal vs forward returns. <b class=chg-down>Negative IC</b> = contrarian (high signal → negative forward return). Bars: 10 left-to-right = bottom-decile (cold) → top-decile (hot); a working contrarian signal slopes <span class=chg-down>down-left</span> / <span class=chg-up>up-right</span>.</p>
+        <h3>📈 Per-signal IC (raw — legacy reference only, NOT the model horizon)</h3>
+        <p class=hint>⚠️ <b>The model is tuned and validated at 1 month</b> (factor-neutral) — see the 🧮 Methodology card above; nothing in this table drives any weight. This is a per-signal reference using <b>raw</b> (non-factor-neutral) IC at each signal's best-fitting horizon (shown in the "kind @ horizon" column, often 3m), kept only because the decile bars show each signal's shape. Information Coefficient (Spearman) per signal vs forward returns. <b class=chg-down>Negative IC</b> = contrarian (high signal → negative forward return). Bars: 10 left-to-right = bottom-decile (cold) → top-decile (hot); a working contrarian signal slopes <span class=chg-down>down-left</span> / <span class=chg-up>up-right</span>.</p>
         <div class=table-wrap>
         <table class=signals>
             <thead><tr><th>Signal</th><th>Best</th><th class=num>IC</th><th class=num>Top hit</th><th class=num>Bot hit</th><th>Decile spread (cold → hot)</th></tr></thead>
@@ -1774,7 +1831,7 @@ tr:hover td {{ background: #f8fafc; }}
 </div>
 
 <div class="tab-content" id=tab-watchlist>
-{render_summary_table(watchlist_df, f"👁️ Watchlist ({len(watchlist_df)})", "Tickers in your watchlist table.", "(empty — add via SQL: INSERT INTO watchlist (ticker, label, added_at) VALUES ('NVDA', 'core', date('now')))")}
+{render_summary_table(watchlist_df, f"👁️ Watchlist ({len(watchlist_df)})", "Tickers in your watchlist table.", "(empty — add tickers with: python3 tools/watchlist.py add NVDA MU --label core)")}
 </div>
 
 <div class="tab-content" id=tab-book>

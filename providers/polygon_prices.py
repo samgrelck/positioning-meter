@@ -21,7 +21,15 @@ _MAX_BARS_PER_CALL = 5000  # Polygon caps; ~20y of trading days, never an issue
 
 class PolygonPricesProvider(PricesProvider):
     def __init__(self, rate_limit_sleep: float = 0.1):
-        self._client = RESTClient(require_env("POLYGON_API_KEY"))
+        # Explicit socket timeouts + retries so a slow/half-open connection can't
+        # block a ticker indefinitely. (DNS-resolution hangs are NOT bounded by
+        # these — the per-ticker watchdog in setup/02_ingest_prices.py covers that.)
+        self._client = RESTClient(
+            require_env("POLYGON_API_KEY"),
+            connect_timeout=15.0,
+            read_timeout=15.0,
+            retries=3,
+        )
         self._sleep = rate_limit_sleep
 
     def fetch_prices(

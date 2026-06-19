@@ -5,10 +5,24 @@ Writes a status JSON so the user can poll progress while running in background.
 """
 import csv
 import json
+import signal
 import sys
 import time
 from datetime import date, timedelta
 from pathlib import Path
+
+# Hard per-ticker wall-clock cap. Bounds ANY hang (incl. DNS resolution, which
+# socket timeouts don't cover) so one bad ticker can't stall the whole universe
+# refresh — the failure mode that left half the universe stale on 2026-06-19.
+PER_TICKER_TIMEOUT_SEC = 90
+
+
+class _TickerTimeout(Exception):
+    pass
+
+
+def _alarm_handler(signum, frame):
+    raise _TickerTimeout()
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -78,6 +92,7 @@ def main():
 
     tickers = all_tickers_to_ingest()
     provider = PolygonPricesProvider(rate_limit_sleep=0.1)
+    signal.signal(signal.SIGALRM, _alarm_handler)  # arm per-ticker watchdog
     conn = connect()
 
     started_at = time.time()
@@ -86,10 +101,17 @@ def main():
 
     for i, t in enumerate(tickers, 1):
         try:
-            rows = provider.fetch_prices(t, start, end)
+            signal.alarm(PER_TICKER_TIMEOUT_SEC)
+            try:
+                rows = provider.fetch_prices(t, start, end)
+            finally:
+                signal.alarm(0)  # always disarm, even on timeout/exception
             n = upsert_prices(conn, rows)
             total_rows += n
             msg = f"[{i:>3}/{len(tickers)}] {t:8s}  {n:>5} rows"
+        except _TickerTimeout:
+            failures.append(t)
+            msg = f"[{i:>3}/{len(tickers)}] {t:8s}  TIMEOUT (>{PER_TICKER_TIMEOUT_SEC}s) — skipped"
         except Exception as e:
             failures.append(t)
             msg = f"[{i:>3}/{len(tickers)}] {t:8s}  FAILED — {e}"

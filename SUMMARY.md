@@ -3,7 +3,7 @@
 > Single source of truth for current state. Updated after each milestone.
 > Sister docs: `DESIGN.md` (architecture), `QUESTIONS.md` (decisions/caveats), `GITHUB_SETUP.md` (publishing), `data/backtest_report.md` (latest backtest).
 
-**Last updated:** 2026-05-13 — **V1.13: FINRA universe-wide SI backfill (post-June-2021, verified) + positioning-leaning weights (Pos 0.40 / Tech 0.25 / Opt 0.35).**
+**Last updated:** 2026-06-26 — **V1.18: self-vs-own-history baseline — Temperature & each bucket ranked vs the SAME name's own trailing 1y/6mo, so structurally cool/hot names (e.g. large-cap semis) are flagged when extreme *for themselves*.** This is a **display/context lens only — the scoring model is unchanged and remains frozen at V1.17** (Pos 0.50 / Tech 0.20 / Opt 0.30; the dashboard's model/backtest banners still read V1.17 by design). No weights, signals, or composite touched.
 
 ---
 
@@ -144,6 +144,40 @@ The composite now reads PURELY sentiment + positioning. Names that look "hot" in
 | Options (live snapshot) | yfinance options chains | Forward-only daily, 355 names | 355 | ✅ accumulating |
 | Options (historical) | Polygon Options Advanced ($199-299/mo) | Pending subscription | — | ⏳ ready to fire |
 
+### ⚠️ Form 4 duplication bug — found and fixed 2026-07-31
+
+`insider_form4` had grown to **2,736,968 rows for 76,874 actual transactions (97.2%
+duplicates)**, adding one full copy of the table per daily run since launch.
+
+**Root cause:** the table's primary key was
+`(accession, filer_cik, transaction_date, transaction_code, shares)`, but the openinsider
+provider never populates `filer_cik` — it was **NULL in 100% of rows**, and SQLite (unlike the
+SQL standard) treats NULLs in a primary key as *distinct*. So the PK never matched, and the
+`INSERT OR REPLACE` in `setup/05_ingest_insider.py` appended instead of replacing. `direct_indirect`
+was NULL on every row too, for the same reason.
+
+**Why it mattered:** `lib/signals/loaders.load_insider_net` does a plain `SUM(value_usd)`, so
+every duplicate counted. DDOG showed **$11.8B** of 90-day insider flow against a ~$45B market cap
+(true figure: ~$398M). Inflation was **non-uniform** across tickers (~36× for AAPL, ~76× for GTM,
+since older transactions had accumulated more copies), so it distorted the cross-section, not just
+the scale.
+
+**Fix:** `tools/fix_insider_dupes.py` rebuilds the table with a PK made only of columns the
+provider actually fills — `(accession, ticker, transaction_date, transaction_code, shares,
+price_per_share, filer_name)` — keeping the most recent copy of each transaction. `lib/db.py`
+carries the same PK for fresh DBs, with a comment recording the trap. Verified idempotent:
+re-inserting 5,000 existing rows no longer grows the table. DB shrank **2.74 GB → 2.15 GB**.
+
+**Measured impact on scores** (after re-running `06_compute_signals.py`): small, as expected —
+`insider_net_90d_signed` is only 11.4% of the positioning bucket = 5.7% of the composite. Mean
+absolute temperature change **0.09 pts**, max **1.73 pts** (CALX), **zero** names moved >2 pts,
+pre/post rank correlation **0.9998**. Real bug, correctly fixed, but it was never the reason
+readings looked muted — that was the scale compression addressed in V1.21.
+
+**Still open:** 35 rows (one ticker) carry `value_usd = 2147483647` — exactly INT32_MAX, a
+source-side overflow sentinel rather than a real dollar amount. Not touched by default; run
+`tools/fix_insider_dupes.py --fix-sentinels` to null them.
+
 ## V1.5 final composite signals
 
 **In composite (V1.7) — sentiment + positioning + options:**
@@ -174,8 +208,76 @@ The composite now reads PURELY sentiment + positioning. Names that look "hot" in
 - **Conviction** (0–100): how aligned the buckets are. High = all hot or all cold; low = mixed.
 - **Anomaly count** (0–N): # of signals where ticker is at 90th+ %ile vs cluster peers today.
 
+## Self-vs-own-history (V1.18 — display lens, model still frozen at V1.17)
+
+**Problem it solves:** Temperature and every bucket are scored partly cross-sectionally (`pct_peer` vs the full TMT universe) and partly vs own 5y signal history (`pct_self`), but the *resulting* Temperature was only ever shown cross-sectionally. Structurally quiet names — large-cap semis whose realized vol / positioning churn / options activity stay low (ADI, AMD, MU, ALAB were the motivating examples) — therefore sit persistently mid/cool and never stand out, even on the days they're as active as they ever get *for themselves*.
+
+**What was added:** for the composite Temperature and each bucket (positioning / technical / options), `setup/06_compute_signals.py` now computes a **self-history percentile + z-score vs the name's own trailing 1y (252d, headline) and 6mo (126d)** — `rolling_percentile_rank` / `rolling_zscore` in `lib/signals/percentiles.py`, applied to the composite + bucket panels (which already exist as `date×ticker` time series). Stored in `composite_daily` as `{temp,pos,tech,opt}_selfpct_1y / _selfpct_6m / _selfz_1y` (12 columns; `lib/db.migrate_schema()` ALTERs existing DBs). Window in `config.yaml` → `composite.self_history`.
+
+**Where it shows:** a sortable **"Self 1y"** column in the All-Names / Watchlist / movers / flag tables (sort it to surface names extreme *for themselves*); the drill-down "In a nutshell" narrative adds a "Vs its own past year" line for Temp + a "vs own 1y" tag on each bucket pillar; new glossary card; CSV export includes the fields.
+
+**Caveat (built in):** options data is forward-only (bucket history ~1 month so far), so `opt_selfpct_1y` is correctly NULL until ≥50 obs accrue, and the *Temperature* self-history carries a one-time downward step where options came online in 2026 (biases it slightly cool). The **positioning & technical** self-histories use clean ~10y data and are the robust reads; the dashboard says so inline.
+
+### Ex-technical self-history (V1.20 — display lens, model still frozen at V1.17)
+
+**Problem it solves:** `Self 1y` ranks *Temperature*, which is 20% technicals — the fastest-moving, most price-reflexive bucket. A name can therefore print a hot Self 1y largely because it has rallied, which is the opposite of what a positioning read is for. There was no way to ask "is the **crowding / options-hedging** setup extreme for this name, independent of price?"
+
+**What was added:** `setup/06_compute_signals.py` builds an **ex-technical composite** from the positioning + options buckets only, at their config weights renormalized over the two kept buckets (0.50/0.30 → **0.625 Pos / 0.375 Opt**), and runs the same self-history transform over it. Stored in `composite_daily` as `extech_selfpct_1y / _selfpct_6m / _selfz_1y` (3 columns, added to `lib/db.migrate_schema()`). It is a read-out only — it never feeds the composite, the flags, or the backtest.
+
+**Design choice — `min_buckets_present=1`** (Temperature uses 2). Options history begins **2026-05-12**; requiring both buckets would cap the whole series at ~50 trading days and make a "1y" percentile meaningless. With 1, the series runs the full history: positioning-only before options came online, pos+opt after. The cost is a composition break at that date — the same kind Temperature already carries — disclosed in the column tooltip, the glossary card, and the drill-down narrative.
+
+**Where it shows:** a **"Self 1y P+O"** column beside Self 1y in the All-Names (sortable, `data-sort=xself1y`) / Watchlist / hot-cold / movers / flag tables; an "Ex-technicals" line in the drill-down "In a nutshell" that calls out the **gap vs the headline Self 1y** (≥15pts below ⇒ the headline reading is mostly price action; ≥15 above ⇒ positioning is more stretched than price); a glossary card; CSV export.
+
+## Interpretability pass (V1.21 — display only, model still frozen at V1.17)
+
+Prompted by the observation that watchlist readings all looked muted and it was
+unclear what to focus on. Nothing in the model changed; four things changed on screen.
+
+**1. `Univ %ile` column, beside Temp everywhere.** Temperature is the weighted average
+of ~15 percentile signals, so the central limit compresses it toward 50: cross-sectional
+**std ~12.9, effective range ~20–89, only ~6% of names above 70 and ~6% below 30** — and
+that has held every year since 2016 (yearly std 12.0–17.6), so it is structural, not a
+current-tape artifact. A 0–100 scale therefore *reads* like a percentile without being one:
+**Temp 38 is the 19th percentile, Temp 55 is the 65th, Temp 65 is the 87th.** The new column
+is the real cross-sectional percentile. It is a monotone per-date transform of Temp, so it
+provably cannot change any ordering, IC or backtest number — `temp_univpct` was already
+computed in `load_data()` for the drill-down; it is now surfaced everywhere.
+
+**2. `Setup` quadrant column.** Positioning tercile × technical tercile, universe-ranked,
+tagging only the four corners (`assign_quadrants` in `08_render_dashboard.py`). Word =
+crowding, arrow = price. Mean 1m factor-neutral residual return per cell, 121 non-overlapping
+periods 2016–2026:
+
+| | price weak | price strong |
+|---|---|---|
+| **positioning light** | `Under-owned ↓` **+3.7%/yr** (t 1.68) | `Under-owned ↑` **+2.6%/yr** (t 1.04) |
+| **positioning heavy** | `Crowded ↓` **−1.5%/yr** (t −0.70) | `Crowded ↑` **−3.5%/yr** (t −1.86) |
+
+Within strong price action, light-positioning beats heavy-positioning by **+6.1%/yr (t 2.00)**.
+Middle terciles are deliberately untagged — no measurable edge there. **Caveat carried on the
+dashboard:** that cell was picked after inspecting a 3×3 grid, so it carries a
+multiple-comparison discount, and walk-forward already showed decile L/S does not survive OOS.
+
+**3. `Conv` column removed** from all tables (field still computed, still in the CSV). Tested
+as a filter and it does not work: composite IC flat from no filter through conviction ≥70
+(−0.0235 → −0.0207), then degraded at ≥80 (−0.0146, t −1.65). Screening on bucket agreement
+discarded signal rather than sharpening it.
+
+**4. New `📖 How to read it` tab** (`render_reading_guide`). Five sections: the scale illusion
+with a live Temp→percentile table; which pillars to trust (positioning IC −0.022 t −3.9 and its
+own decile L/S +8.2%/yr t 2.74 vs the composite's +4.8%/yr t 1.47; technical −0.011 t −1.3;
+options has **one** measurable non-overlapping 1m period, so its 0.30 weight is a prior and the
+`Self 1y P+O` column is 37.5% unvalidated); the Setup grid; an **auto-selected worked example**
+(today's widest positioning-vs-technicals divergence, so it never goes stale) walked through in
+five steps; and what not to lean on. Deliberately does **not** change any output — it describes
+the evidence and leaves the frozen weights alone.
+
 ## Dashboard features (V2.0)
 
+- 📐 **Univ %ile column** (V1.21) — Temperature's percentile vs the whole TMT universe today. Judge extremity on this, not raw Temp; the composite is compressed toward 50 by construction.
+- 🎯 **Setup column** (V1.21) — positioning × technical corner tag (`Crowded ↑/↓`, `Under-owned ↑/↓`); sortable via `data-sort=quadrank`, hover for the historical cell return.
+- 🌡️ **Self 1y column** (V1.18) — Temperature vs the name's own trailing 1-year range (percentile); sortable; hover for z-score + 6mo. See "Self-vs-own-history" above.
+- 🧊 **Self 1y P+O column** (V1.20) — the same own-history percentile with **technicals excluded** (positioning + options only, 0.625/0.375); sortable. Read against Self 1y to split "extreme because it rallied" from "extreme on crowding/hedging".
 - 📘 **Glossary** at top — every metric explained
 - 🔍 **Search box** — filter by ticker or name across all panels
 - 🧬 **Cluster filter** — show only theme_detector cluster X

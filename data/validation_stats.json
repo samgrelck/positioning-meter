@@ -1,5 +1,5 @@
 {
-  "as_of": "2026-06-12",
+  "as_of": "2026-07-24",
   "horizon": "1-month, factor-neutral, non-overlapping",
   "bucket_weights": {
     "positioning": 0.5,
@@ -9,15 +9,15 @@
     "valuation": 0.0
   },
   "in_sample": {
-    "ic": -0.0234,
-    "t": -3.95,
-    "n": 120,
-    "ls_ann": 0.0535
+    "ic": -0.023,
+    "t": -3.83,
+    "n": 121,
+    "ls_ann": 0.0567
   },
   "oos": {
-    "ic": -0.019,
-    "t": -2.62,
+    "ic": -0.0198,
+    "t": -2.68,
     "n": 84,
-    "ls_ann": 0.011
+    "ls_ann": 0.0034
   }
 }

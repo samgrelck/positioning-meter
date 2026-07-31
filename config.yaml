@@ -37,6 +37,20 @@ signals:
   options_eligibility:
     min_market_cap: 3_000_000_000
     min_avg_contract_volume: 1000
+  # V1.18: self-vs-own-history baseline. Ranks today's Temperature (and each
+  # bucket) against the SAME name's own trailing distribution, so a structurally
+  # cool name (e.g. large-cap semis suppressed by positioning/options) is flagged
+  # when it's hot/cold *for itself* even if it never stands out cross-sectionally.
+  # Two horizons: 1y headline + 6mo confirmation. Computed on the composite +
+  # bucket panels in setup/06; min_periods inside rolling_percentile_rank lets a
+  # window populate before it's fully filled.
+  # CAVEAT: the options bucket is forward-only (data starts 2026), so the
+  # Temperature self-history carries a one-time downward step where options came
+  # online; lean on the positioning/technical self-history (clean ~10y) until
+  # options accrues a full year. See QUESTIONS.md.
+  self_history:
+    primary_window_days: 252    # 1y — headline "hot/cold for itself"
+    secondary_window_days: 126  # 6mo — shorter horizon confirmation
 
 composite:
   # V1.5: valuation excluded (overlay-only).

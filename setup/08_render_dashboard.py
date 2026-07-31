@@ -31,6 +31,12 @@ HTML_OUT = project_path("data/dashboard.html")
 SECTOR_GROUPS_PATH = project_path("data/sector_groups.json")
 
 
+def html_escape(s) -> str:
+    """Escape text for safe inclusion in an HTML attribute (e.g. title="...")."""
+    return (str(s).replace("&", "&amp;").replace('"', "&quot;")
+            .replace("<", "&lt;").replace(">", "&gt;"))
+
+
 def fmt(v, places=1, suffix="", default="—"):
     if v is None or pd.isna(v):
         return default
@@ -78,6 +84,179 @@ def temp_class(v):
     return "neutral"
 
 
+# ---- V1.18: self-vs-own-history helpers ----
+# A self-history percentile is 0..100 with the same "high = hot" orientation as
+# temperature, so temp_class() colors it correctly (78 -> hot-for-itself = red).
+
+def selfpct_word(pct):
+    """Plain-language read of a self-history percentile."""
+    if pct is None or pd.isna(pct):
+        return None
+    p = float(pct)
+    if p >= 90:
+        return "near its own 1y high"
+    if p >= 70:
+        return "hot for itself"
+    if p >= 55:
+        return "a touch warm for itself"
+    if p > 45:
+        return "middling for itself"
+    if p > 30:
+        return "a touch cool for itself"
+    if p > 10:
+        return "washed-out for itself"
+    return "near its own 1y low"
+
+
+def selfpct_cell(pct, z=None, pct_6m=None, label="Temp", note=""):
+    """Render a self-history percentile as a colored numeric <td> with a
+    tooltip carrying the z-score and the 6-month read.
+
+    `note` appends a basis clarification (used by the ex-technical column)."""
+    if pct is None or pd.isna(pct):
+        return '<td class="num self" title="No self-history yet (insufficient own-history window).">—</td>'
+    cls = temp_class(pct)
+    z_str = f", {float(z):+.1f}σ" if (z is not None and not pd.isna(z)) else ""
+    sixm = f" · 6mo: {float(pct_6m):.0f}th" if (pct_6m is not None and not pd.isna(pct_6m)) else ""
+    title = (f"{label} sits at its {_ord(pct)} percentile vs this name's own "
+             f"trailing 1y{z_str}{sixm}. High = hot for itself; low = washed-out for "
+             f"itself — reframes a structurally cool/hot name vs its own norm.{note}")
+    return f'<td class="num temp {cls}" title="{title}">{float(pct):.0f}</td>'
+
+
+# V1.20 — the ex-technical ("Positioning + Options") self-history column.
+# One source of copy for the header tooltip, the cell tooltip and the glossary
+# so the three can never drift apart. Plain text only (goes inside title="...").
+EXTECH_COL = "Self 1y P+O"
+EXTECH_HDR_TITLE = (
+    "Same read as Self 1y, but scored off the POSITIONING + OPTIONS pillars only — "
+    "technicals excluded. Where today's positioning+options blend sits within this name's "
+    "own trailing 1-year range (percentile 0-100). Use it when you want the crowding / "
+    "hedging picture uncontaminated by how the stock has actually traded; compare it against "
+    "Self 1y to see how much of the self-history read is just price action. "
+    "Weights: the config 0.50 Pos / 0.30 Opt renormalized to 0.625 / 0.375. "
+    "Caveat: options data starts 2026-05-12, so the earlier part of the 1-year window is "
+    "positioning-only."
+)
+EXTECH_CELL_NOTE = (
+    " Positioning + options pillars only (technicals excluded; 0.625 Pos / 0.375 Opt). "
+    "Options history starts 2026-05-12 — earlier window is positioning-only."
+)
+
+
+# V1.21 — the cross-sectional percentile of Temperature. Temperature is an
+# average of ~15 percentile signals, so it is compressed toward 50 by the central
+# limit (std ~13; only ~6% of names clear 70 and ~6% fall under 30). That makes a
+# 0-100 scale READ like a percentile while not being one. This column is the
+# actual percentile. It is a monotone per-date transform of Temp, so it cannot
+# change any ranking, IC or backtest result — it only changes what you see.
+UNIVPCT_COL = "Univ %ile"
+UNIVPCT_HDR_TITLE = (
+    "Where this name's Temperature ranks against the whole TMT universe TODAY "
+    "(percentile 0-100). Prefer this over the raw Temp when judging how extreme a "
+    "reading is: the composite averages ~15 percentile signals, which compresses it "
+    "toward the middle (std ~13, effective range ~20-89), so Temp 38 is really a "
+    "bottom-quintile name and Temp 62 is already top-quartile. Purely a re-scaling "
+    "of Temp — same ordering, same model."
+)
+
+QUAD_HDR_TITLE = (
+    "Setup quadrant: how crowded the name is (positioning tercile) crossed with "
+    "which way price is going (technical tercile), ranked across the universe today. "
+    "Word = positioning, arrow = price. Only the four corners are tagged; middle "
+    "terciles show a dot because the middle of the grid carries no measurable edge. "
+    "Hover any tag for its historical 1-month factor-neutral cell return. "
+    "See the 📖 How to read it tab."
+)
+
+
+# V1.21 — the "Setup" quadrant: positioning tercile x technical tercile, ranked
+# across the universe on the current date. Only the four CORNERS get a tag; the
+# middle terciles are deliberately unlabeled because they carry no measurable
+# edge. Word = how crowded the name is, arrow = which way price is going.
+#
+# The annualized figures in the tooltips are the mean 1-month factor-neutral
+# (sector + beta residualized) forward return of that cell over 121
+# non-overlapping periods, 2016-2026. They are a DESCRIPTION of the historical
+# cell, not a forecast: t-stats are 0.7-1.9 and the cells were read off a 3x3
+# grid, so treat them as orientation, not as expected returns.
+QUAD_DEFS = {
+    ("cold", "weak"): (
+        "Under-owned ↓", "quad-cool",
+        "Light positioning + weak price action — the classic washed-out setup. "
+        "Best-performing cell historically: +3.7%/yr residual (t 1.68)."),
+    ("cold", "strong"): (
+        "Under-owned ↑", "quad-cool",
+        "Light positioning + strong price action — strength that nobody is "
+        "positioned for. +2.6%/yr residual (t 1.04)."),
+    ("hot", "weak"): (
+        "Crowded ↓", "quad-warm",
+        "Heavy positioning + weak price action — crowded and rolling over. "
+        "−1.5%/yr residual (t −0.70)."),
+    ("hot", "strong"): (
+        "Crowded ↑", "quad-hot",
+        "Heavy positioning + strong price action — crowded strength, the most "
+        "expensive place to be adding. Worst cell historically: −3.5%/yr "
+        "residual (t −1.86)."),
+}
+# Sort order for the Setup column: most-crowded first descending.
+QUAD_SORT_RANK = {"Crowded ↑": 2, "Crowded ↓": 1, "·": 0,
+                  "Under-owned ↑": -1, "Under-owned ↓": -2}
+
+QUAD_NONE = ("·", "quad-none",
+             "Middle tercile on positioning or on technicals — no corner tag. "
+             "The middle of this grid showed no measurable edge, so it is left "
+             "deliberately blank rather than given a label it hasn't earned.")
+
+
+def _tercile(s: pd.Series, labels) -> pd.Series:
+    """Rank a score cross-sectionally into 3 equal buckets. NaN stays NaN."""
+    valid = s.notna()
+    out = pd.Series(pd.NA, index=s.index, dtype="object")
+    if valid.sum() < 6:
+        return out
+    out.loc[valid] = pd.qcut(s[valid].rank(method="first"), 3, labels=list(labels)).astype(object)
+    return out
+
+
+def assign_quadrants(snap: pd.DataFrame) -> pd.DataFrame:
+    """Add `quad_label` / `quad_cls` / `quad_title` from the pos x tech corners."""
+    pos_t = _tercile(snap.get("score_positioning", pd.Series(dtype=float)),
+                     ("cold", "mid", "hot"))
+    tech_t = _tercile(snap.get("score_technical", pd.Series(dtype=float)),
+                      ("weak", "mid", "strong"))
+    labels, classes, titles = [], [], []
+    for p, t in zip(pos_t, tech_t):
+        lbl, cls, title = QUAD_DEFS.get((p, t), QUAD_NONE)
+        labels.append(lbl)
+        classes.append(cls)
+        titles.append(title)
+    snap["quad_label"] = labels
+    snap["quad_cls"] = classes
+    snap["quad_title"] = titles
+    return snap
+
+
+def quad_cell(row) -> str:
+    """Render the Setup quadrant as a <td> badge."""
+    lbl = row.get("quad_label") or "·"
+    cls = row.get("quad_cls") or "quad-none"
+    title = html_escape(row.get("quad_title") or "")
+    return f'<td class=num><span class="quad {cls}" title="{title}">{lbl}</span></td>'
+
+
+def univpct_cell(pct) -> str:
+    """Render the cross-sectional (vs TMT universe today) percentile of Temp."""
+    if pct is None or pd.isna(pct):
+        return '<td class="num univ" title="No composite temperature today.">—</td>'
+    title = (f"Temperature ranks at the {_ord(pct)} percentile of the TMT universe "
+             f"today. Read THIS, not the raw Temp: the composite averages ~15 "
+             f"percentile signals, which compresses it toward 50 (std ~13, and only "
+             f"~6% of names ever clear 70), so a Temp of 38 is really a bottom-quintile "
+             f"reading. This column undoes that compression.")
+    return f'<td class="num temp {temp_class(pct)}" title="{title}">{float(pct):.0f}</td>'
+
+
 def load_data():
     conn = connect()
     latest = conn.execute("SELECT MAX(date) FROM composite_daily").fetchone()[0]
@@ -90,6 +269,43 @@ def load_data():
     snap = snap.merge(universe, on="ticker", how="left")
     snap["name"] = snap["name"].fillna(snap["ticker"])
     snap["mcap_b"] = snap["market_cap"] / 1e9 if "market_cap" in snap.columns else None
+
+    # Cross-sectional standing: percentile rank of the composite temp + each
+    # pillar score vs the whole TMT universe on this date. Surfaced per-pillar in
+    # the drilldown "In a nutshell" so each pillar shows BOTH its rank vs TMT
+    # today and its rank vs the name's own trailing history (the *_selfpct_* cols).
+    for src, dst in [("temperature", "temp_univpct"),
+                     ("score_positioning", "pos_univpct"),
+                     ("score_technical", "tech_univpct"),
+                     ("score_options", "opt_univpct")]:
+        if src in snap.columns:
+            snap[dst] = snap[src].rank(pct=True) * 100.0
+
+    # V1.21: Setup quadrant (positioning x technical corners). Display-only —
+    # never feeds the composite, the flags or the backtest.
+    snap = assign_quadrants(snap)
+
+    # New-listing guard. A name with too little PRICE HISTORY (e.g. a recent IPO
+    # like SPCX/SpaceX, which posts a ~99 temp off just IPO float-churn + RSI)
+    # can top the board on 1-2 artifact signals. Flag such names so they still
+    # show in the drilldown + All Names, but are HELD OUT of the hottest/movers/
+    # flag rankings until they mature. Keyed on trading-day count only: an
+    # established name that merely lacks the options group (e.g. an illiquid
+    # share class with 3 signals) is NOT a new listing and must not be flagged.
+    MIN_HIST_DAYS = 40
+    pdays = pd.read_sql_query(
+        "SELECT ticker, COUNT(*) AS price_days FROM prices GROUP BY ticker", conn)
+    snap = snap.merge(pdays, on="ticker", how="left")
+    snap["price_days"] = snap["price_days"].fillna(0).astype(int)
+    # present composite signals today — for the drilldown banner text only.
+    nsig = pd.read_sql_query(
+        "SELECT ticker, COUNT(*) AS n_signals FROM signals_daily "
+        "WHERE date = ? AND bucket IN ('positioning','technical','options') "
+        "AND (pct_self IS NOT NULL OR pct_peer IS NOT NULL) GROUP BY ticker",
+        conn, params=(latest,))
+    snap = snap.merge(nsig, on="ticker", how="left")
+    snap["n_signals"] = snap["n_signals"].fillna(0).astype(int)
+    snap["thin_history"] = snap["price_days"] < MIN_HIST_DAYS
 
     # 7-day prior snapshot for change
     recent = pd.read_sql_query(
@@ -260,8 +476,8 @@ SIGNAL_DESCRIPTIONS = {
     # NTM P/E is shown on drill-down's live-overlay card.
     "insider_net_90d_signed": ("Insider net 90d (signed)", "Σ Form 4 net $ over trailing 90d."),
     "insider_net_90d_abs": ("Insider |net 90d| (overlay)", "Magnitude of insider activity."),
-    "short_volume_ratio_14d": ("Short volume 14d ratio", "FINRA Reg SHO short-vol/total-vol, 14d avg."),
-    "si_true_dtc": ("Short interest days-to-cover", "NASDAQ true SI ÷ avg daily share volume."),
+    "short_volume_ratio_14d": ("Short volume 14d ratio", "FINRA Reg SHO short-marked share of daily volume, 14d avg. A FLOW measure of intraday shorting activity — NOT the standing short position. Most short-marked prints are market-maker/liquidity-provider hedging and intraday arb that is flat by the close, so a high reading reflects heavy two-sided trading more than directional bearish bets. Read alongside Short interest days-to-cover (the actual open short position): high short volume + low days-to-cover = churned/heavily-traded, not pressed short."),
+    "si_true_dtc": ("Short interest days-to-cover", "Actual reported short interest (open shares held short, bi-weekly FINRA snapshot) ÷ avg daily volume = days of volume needed to cover. A STOCK/position measure of real crowding, and the more reliable read of bearish positioning. Low when the open short book is small AND/OR the stock is very liquid (high turnover deflates days-to-cover). Contrast with Short volume 14d ratio, a same-day flow dominated by non-directional market-making."),
     "float_turnover_20d": ("Float turnover (20d)", "20-day avg daily share volume ÷ free float. High = heavy churn relative to tradable shares — a long/retail-crowding proxy (the dimension short interest + insider flow miss). High = HOT/crowded."),
     "inst_own_pct": ("Institutional ownership % (overlay)", "Sum of latest-quarter 13F shares ÷ shares outstanding. LOW = retail-heavy ownership. Overlay only — 13F is quarterly and 45d lagged."),
     "eps_revision_4w": ("EPS revision % 4w (overlay)", "% change in NTM forward EPS over trailing 20 trading days. Forward-only — accumulating since estimates ingestion started; null for early dates."),
@@ -300,11 +516,14 @@ def render_summary_table(df: pd.DataFrame, title: str, subtitle: str = "",
                 <td><a href="#t-{ticker}" class=ticker-pill>{ticker}</a></td>
                 <td class=name>{name}</td>
                 <td class="num temp {tcls}">{fmt(r.get('temperature'))}</td>
+                {univpct_cell(r.get('temp_univpct'))}
                 <td class="num {chg_class}">{chg_str}</td>
+                {quad_cell(r)}
+                {selfpct_cell(r.get('temp_selfpct_1y'), r.get('temp_selfz_1y'), r.get('temp_selfpct_6m'), label='Temp')}
+                {selfpct_cell(r.get('extech_selfpct_1y'), r.get('extech_selfz_1y'), r.get('extech_selfpct_6m'), label='Pos+Opt', note=EXTECH_CELL_NOTE)}
                 <td class=num>{fmt(r.get('score_positioning'))}</td>
                 <td class=num>{fmt(r.get('score_technical'))}</td>
                 <td class=num>{fmt(r.get('score_options'))}</td>
-                <td class="num conv">{fmt(r.get('conviction'))}</td>
                 <td class="num anom">{fmt(r.get('anomaly_count'), places=0)}</td>
                 <td class=flagcol>{late}{wash}{ern}</td>
             </tr>
@@ -319,12 +538,15 @@ def render_summary_table(df: pd.DataFrame, title: str, subtitle: str = "",
                 <tr>
                     <th>Ticker</th>
                     <th>Name</th>
-                    <th class=num title="Composite 0-100. High=hot/late (contrarian-bearish). Low=cold/washed (contrarian-bullish)">Temp</th>
+                    <th class=num title="Composite 0-100. High=hot/late (contrarian-bearish). Low=cold/washed (contrarian-bullish). NOTE: this scale is compressed — read Univ %ile beside it.">Temp</th>
+                    <th class=num title="{UNIVPCT_HDR_TITLE}">{UNIVPCT_COL}</th>
                     <th class=num title="7-day change in temperature">7d Δ</th>
-                    <th class=num title="Positioning & crowding: short interest, insider flow, and float turnover (long/retail crowding)">Pos</th>
+                    <th class=num title="{QUAD_HDR_TITLE}">Setup</th>
+                    <th class=num title="Temperature vs this name's OWN trailing 1-year range (percentile, 0-100). High = hot for itself; low = washed-out for itself — surfaces structurally cool/hot names that never stand out cross-sectionally. Hover a cell for the z-score and 6-month read.">Self 1y</th>
+                    <th class=num title="{EXTECH_HDR_TITLE}">{EXTECH_COL}</th>
+                    <th class=num title="Positioning & crowding: short interest, insider flow, and float turnover (long/retail crowding). Best-validated pillar — see the 📖 How to read it tab.">Pos</th>
                     <th class=num title="Technical / price-revealed sentiment">Tech</th>
-                    <th class=num title="Options sentiment bucket (IV rank, skew, term slope, P/C)">Opt</th>
-                    <th class=num title="Conviction (bucket agreement)">Conv</th>
+                    <th class=num title="Options sentiment bucket (IV rank, skew, term slope, P/C). Small sample — see the 📖 How to read it tab.">Opt</th>
                     <th class=num title="# signals at 90th+ %ile vs the full TMT universe">Anom</th>
                     <th title="🔥 late · ❄️ wash · 📅 earnings within 14d">Flags</th>
                 </tr>
@@ -638,18 +860,70 @@ def render_score_narrative(snap_row, sig_long) -> str:
     if snap_row.get("flag_earnings_soon") == 1:
         flag_bits.append("earnings within ~2 weeks")
 
-    conv = snap_row.get("conviction")
-    conv_txt = ""
-    if conv is not None and not pd.isna(conv):
-        conv_txt = "Buckets broadly agree." if conv >= 66 else ("Signals are mixed (low conviction)." if conv <= 40 else "")
+    # V1.21: lead with the cross-sectional standing, because the raw 0-100 is
+    # compressed toward 50 and reads far milder than it is.
+    up = snap_row.get("temp_univpct")
+    up_txt = ""
+    if up is not None and not pd.isna(up):
+        up_txt = f" That is the <b>{_ord(up)} percentile</b> of the TMT universe today."
 
-    parts = [f"<b>{t:.0f}/100</b> — {head}.", drivers]
+    quad_txt = ""
+    if (snap_row.get("quad_label") or "·") != "·":
+        quad_txt = (f"Setup: <b>{snap_row['quad_label']}</b> — "
+                    f"{snap_row.get('quad_title', '').split(' Best')[0].split(' Worst')[0].strip()}")
+
+    parts = [f"<b>{t:.0f}/100</b> — {head}.{up_txt}", drivers]
+    if quad_txt:
+        parts.append(quad_txt)
     if sig_bits:
         parts.append("Key signals: " + "; ".join(sig_bits) + ".")
     if flag_bits:
         parts.append("Flags: " + ", ".join(flag_bits) + ".")
-    if conv_txt:
-        parts.append(conv_txt)
+
+    # V1.18: reframe the absolute read against the name's OWN trailing 1y range.
+    sp1 = snap_row.get("temp_selfpct_1y")
+    sz1 = snap_row.get("temp_selfz_1y")
+    sp6 = snap_row.get("temp_selfpct_6m")
+    if sp1 is not None and not pd.isna(sp1):
+        z_bit = f" ({float(sz1):+.1f}σ)" if (sz1 is not None and not pd.isna(sz1)) else ""
+        sixm_bit = f"; 6mo at the {_ord(sp6)}" if (sp6 is not None and not pd.isna(sp6)) else ""
+        opt_caveat = ""
+        if snap_row.get("score_options") is not None and not pd.isna(snap_row.get("score_options")):
+            opt_caveat = (" <span class=basis>(options data began 2026, so the 1y temp baseline is "
+                          "partly pre-options — lean on the clean positioning/technical reads below.)</span>")
+        tup = snap_row.get("temp_univpct")
+        univ_bit = (f" It sits at the {_ord(tup)} %ile <b>across TMT today</b>."
+                    if (tup is not None and not pd.isna(tup)) else "")
+        parts.append(
+            f"<b>Vs its own past year</b>, Temp is at the {_ord(sp1)} %ile{z_bit} — "
+            f"{selfpct_word(sp1)}{sixm_bit}.{univ_bit}{opt_caveat}"
+        )
+
+    # V1.20: the same own-history lens with TECHNICALS STRIPPED OUT (positioning +
+    # options only). Separates "extreme for itself because it has rallied" from
+    # "extreme for itself on crowding / options hedging" — the gap vs the headline
+    # Self 1y is the interesting part, so state it explicitly.
+    xp1 = snap_row.get("extech_selfpct_1y")
+    if xp1 is not None and not pd.isna(xp1):
+        xz1 = snap_row.get("extech_selfz_1y")
+        xz_bit = f" ({float(xz1):+.1f}σ)" if (xz1 is not None and not pd.isna(xz1)) else ""
+        gap_bit = ""
+        if sp1 is not None and not pd.isna(sp1):
+            gap = float(xp1) - float(sp1)
+            if gap <= -15:
+                gap_bit = (" — well below the headline read, so much of the Temperature's "
+                           "own-history extremity is <b>price action, not positioning</b>")
+            elif gap >= 15:
+                gap_bit = (" — well above the headline read: <b>positioning/options are more "
+                           "stretched than price</b> suggests")
+            else:
+                gap_bit = " — broadly in line with the headline read, so the two agree"
+        parts.append(
+            f"<b>Ex-technicals</b> (positioning + options only), it sits at the {_ord(xp1)} %ile"
+            f"{xz_bit} vs its own year{gap_bit}. "
+            f"<span class=basis>(0.625 Pos / 0.375 Opt; options history starts 2026-05-12, so the "
+            f"earlier part of the window is positioning-only.)</span>"
+        )
     body = " ".join(p for p in parts if p)
 
     # Per-pillar color: one line each for positioning / technical / options
@@ -693,14 +967,43 @@ def render_score_narrative(snap_row, sig_long) -> str:
                     bits = " — " + ", ".join(sb)
                 if diverges:
                     bits += ' <b class=chg-down>(signals diverge)</b>'
-        basis = "%iles: 50/50 own 5-yr history + TMT universe"
+        basis = "score = 50/50 own-5yr + TMT-universe blend of the pillar's signals"
+        # V1.18/V1.19: show each pillar's standing on THREE lenses — its rank vs
+        # the TMT universe today (*_univpct), and vs the name's OWN trailing 1y/6m
+        # history (*_selfpct_*; clean ~10y history for positioning/technical,
+        # shorter for options).
+        prefix = {"positioning": "pos", "technical": "tech", "options": "opt"}[bname]
+        up = snap_row.get(f"{prefix}_univpct")
+        bp1 = snap_row.get(f"{prefix}_selfpct_1y")
+        bp6 = snap_row.get(f"{prefix}_selfpct_6m")
+        bz1 = snap_row.get(f"{prefix}_selfz_1y")
+        pctile_parts = []
+        if up is not None and not pd.isna(up):
+            pctile_parts.append(f"vs TMT {_ord(up)}")
+        bword = selfpct_word(bp1)
+        if bword:
+            zb = f" {float(bz1):+.1f}σ" if (bz1 is not None and not pd.isna(bz1)) else ""
+            six = f" / 6m {_ord(bp6)}" if (bp6 is not None and not pd.isna(bp6)) else ""
+            pctile_parts.append(f"vs own 1y {_ord(bp1)}{zb}{six} ({bword})")
+        pctile_bit = (' <b class=basis>· ' + ' · '.join(pctile_parts) + '</b>') if pctile_parts else ''
         pillar_rows.append(
-            f'<li><b>{label[bname].capitalize()} {score:.0f} ({desc(score)})</b> — {lead}{bits} '
+            f'<li><b>{label[bname].capitalize()} {score:.0f} ({desc(score)})</b>{pctile_bit} — {lead}{bits} '
             f'<span class=basis>({basis})</span>.</li>')
     pillars_html = f'<ul class=pillars>{"".join(pillar_rows)}</ul>' if pillar_rows else ""
 
+    thin_banner = ""
+    if snap_row.get("thin_history"):
+        nd = int(snap_row.get("price_days") or 0)
+        ns = int(snap_row.get("n_signals") or 0)
+        thin_banner = (
+            f'<p class="thin-banner">🆕 <b>New listing — insufficient history.</b> '
+            f'Scored on only {ns} live signal{"" if ns == 1 else "s"} over {nd} trading '
+            f'day{"" if nd == 1 else "s"}, so the composite is <b>provisional</b> and this '
+            f'name is held out of the hottest / movers / flag rankings until it matures '
+            f'(no short-interest, insider, options, or long-horizon technical history yet).</p>')
+
     return (f'<div class="score-narrative"><h4>📝 In a nutshell</h4>'
-            f'<p>{body}</p>{pillars_html}</div>')
+            f'{thin_banner}<p>{body}</p>{pillars_html}</div>')
 
 
 def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
@@ -748,14 +1051,16 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
     if not sig_long.empty:
         for _, sr in sig_long.iterrows():
             sn = sr["signal_name"]
-            label, _ = SIGNAL_DESCRIPTIONS.get(sn, (sn, ""))
+            label, sdesc = SIGNAL_DESCRIPTIONS.get(sn, (sn, ""))
             ps = sr.get("pct_self")
             pp = sr.get("pct_peer")
             ps_cls = temp_class(ps) if ps is not None else ""
             pp_cls = temp_class(pp) if pp is not None else ""
+            label_cell = (f'<td class=sig-label title="{html_escape(sdesc)}">{label} <span class=info-dot>ⓘ</span></td>'
+                          if sdesc else f'<td>{label}</td>')
             sig_rows.append(f"""
                 <tr>
-                    <td>{label}</td>
+                    {label_cell}
                     <td class=mono>{sr['bucket']}</td>
                     <td class="num mono">{fmt(sr['raw_value'], 4)}</td>
                     <td class="num {ps_cls}">{fmt(ps)}</td>
@@ -1020,7 +1325,8 @@ def render_drilldown(snap_row, sig_long, est_row, earnings_row, actions,
             <div class=stat><span class=stat-label>Pos</span><span class="stat-val {temp_class(snap_row.get('score_positioning'))}">{fmt(snap_row.get('score_positioning'))}</span></div>
             <div class=stat><span class=stat-label>Tech</span><span class="stat-val {temp_class(snap_row.get('score_technical'))}">{fmt(snap_row.get('score_technical'))}</span></div>
             <div class=stat><span class=stat-label>Opt</span><span class="stat-val {temp_class(snap_row.get('score_options'))}">{fmt(snap_row.get('score_options'))}</span></div>
-            <div class=stat><span class=stat-label>Conv</span><span class=stat-val>{fmt(snap_row.get('conviction'))}</span></div>
+            <div class=stat title="{html_escape(UNIVPCT_HDR_TITLE)}"><span class=stat-label>Univ %ile</span><span class="stat-val {temp_class(snap_row.get('temp_univpct'))}">{fmt(snap_row.get('temp_univpct'), 0)}</span></div>
+            <div class=stat title="{html_escape(snap_row.get('quad_title') or '')}"><span class=stat-label>Setup</span><span class="stat-val"><span class="quad {snap_row.get('quad_cls') or 'quad-none'}">{snap_row.get('quad_label') or '·'}</span></span></div>
             <div class=stat><span class=stat-label>Anom</span><span class=stat-val>{fmt(snap_row.get('anomaly_count'), 0)}</span></div>
             <div class=stat-spark>{spark_svg}</div>
         </div>
@@ -1242,6 +1548,263 @@ def render_backtest_card(results: list, signal_weights=None, signal_to_bucket=No
     """
 
 
+def _pick_teaching_example(snap: pd.DataFrame):
+    """Pick the name whose headline Temp hides the most — i.e. the widest gap
+    between what positioning says and what technicals say. Deterministic, so the
+    example only changes when the underlying divergence leader changes.
+
+    Restricted to names with all three pillars and enough price history, so the
+    walkthrough never leans on a half-scored or brand-new listing."""
+    d = snap.copy()
+    need = ["pos_univpct", "tech_univpct", "temp_univpct", "score_options"]
+    for c in need:
+        if c not in d.columns:
+            return None
+    d = d[d[need].notna().all(axis=1)]
+    if "thin_history" in d.columns:
+        d = d[~d["thin_history"].astype(bool)]
+    if d.empty:
+        return None
+    d = d.assign(_gap=(d["pos_univpct"] - d["tech_univpct"]).abs())
+    return d.sort_values(["_gap", "ticker"], ascending=[False, True]).iloc[0]
+
+
+def render_reading_guide(snap: pd.DataFrame, sig_long: pd.DataFrame, vs: dict) -> str:
+    """The '📖 How to read it' tab: what to look at, in what order, and why.
+
+    Everything quantitative here is computed from the live snapshot, so the
+    scale table and the worked example cannot go stale. The evidence figures
+    (IC / cell returns) are fixed properties of the V1.17 model's validation and
+    are quoted as constants."""
+    t = snap["temperature"].dropna()
+    n = len(t)
+
+    # --- §1: the live Temp -> percentile mapping -------------------------------
+    map_rows = "".join(
+        f"<tr><td class=num>{v}</td><td class=num><b>{(t < v).mean() * 100:.0f}th</b></td>"
+        f"<td class=num>{(t >= v).sum()}</td></tr>"
+        for v in (30, 35, 40, 45, 50, 55, 60, 65, 70)
+    )
+    scale_stats = (f"mean {t.mean():.1f} · median {t.median():.1f} · "
+                   f"std {t.std():.1f} · range {t.min():.1f}–{t.max():.1f}")
+    pct_hot = (t >= 70).mean() * 100
+    pct_cold = (t <= 30).mean() * 100
+
+    # --- §3: live census of the Setup grid ------------------------------------
+    counts = snap["quad_label"].value_counts().to_dict() if "quad_label" in snap.columns else {}
+
+    def _cnt(lbl):
+        return counts.get(lbl, 0)
+
+    # --- §4: the worked example ----------------------------------------------
+    ex = _pick_teaching_example(snap)
+    if ex is None:
+        example_html = "<p class=hint>Not enough scored names today to build a worked example.</p>"
+    else:
+        tk = ex["ticker"]
+        sigs = sig_long[(sig_long["ticker"] == tk)
+                        & (sig_long["bucket"].isin(["positioning", "technical", "options"]))].copy()
+        sigs["dual"] = sigs[["pct_self", "pct_peer"]].mean(axis=1)
+        sigs = sigs.dropna(subset=["dual"])
+        hot3 = sigs.nlargest(3, "dual")
+        cold3 = sigs.nsmallest(3, "dual")
+        _sl = lambda df: ", ".join(  # noqa: E731
+            f"<code>{r['signal_name']}</code> {_ord(r['dual'])}" for _, r in df.iterrows())
+
+        pos_p, tech_p = ex["pos_univpct"], ex["tech_univpct"]
+        crowded = pos_p >= 50
+        strong = tech_p >= 50
+        # Plain-English statement of what the two pillars disagree about.
+        story = (
+            f"price action in the {_ord(tech_p)} percentile of the universe while "
+            f"positioning sits in the {_ord(pos_p)}"
+        )
+        if strong and not crowded:
+            reading = ("the market is moving this name <b>without</b> anyone being "
+                       "positioned for it — strength that is not yet owned")
+        elif crowded and not strong:
+            reading = ("everybody is already positioned in a name that is <b>not</b> "
+                       "working — crowding without the price to support it")
+        elif crowded and strong:
+            reading = ("both the price and the positioning are extended — the crowd "
+                       "is right and fully aboard, which is where the model is most cautious")
+        else:
+            reading = ("neither the price nor the positioning is extended — a quiet, "
+                       "genuinely washed-out name")
+
+        self1y = ex.get("temp_selfpct_1y")
+        self_txt = (f"{self1y:.0f}th vs its own year" if pd.notna(self1y) else "no self-history yet")
+        agree = (pd.notna(self1y)
+                 and ((ex["temp_univpct"] >= 70 and self1y >= 70)
+                      or (ex["temp_univpct"] <= 30 and self1y <= 30)))
+        confirm_txt = (
+            "Both lenses agree, which is the case that historically mattered: names extreme "
+            "cross-sectionally <b>and</b> against their own year were the only tail cut that "
+            "cleared statistical significance (−7.0%/yr residual for the hot-on-both group, "
+            "t −2.59)."
+            if agree else
+            "The two lenses <b>disagree</b> here, so treat the reading as unconfirmed. A name "
+            "that is extreme on only one of the two showed no reliable edge — the cross-sectional "
+            "reading alone was −2.0%/yr (t −0.62)."
+        )
+
+        example_html = f"""
+<div class=guide-example>
+<h4>4 · Worked example — {tk} ({html_escape(str(ex.get('name') or ''))})</h4>
+<p class=hint>Auto-selected as today's widest positioning-vs-technicals divergence — the case
+where the single headline number hides the most. It will change as the data changes.</p>
+
+<div class=table-wrap>
+<table class=rank>
+<thead><tr><th class=num>Temp</th><th class=num>Univ %ile</th><th class=num>Setup</th>
+<th class=num>Self 1y</th><th class=num>{EXTECH_COL}</th>
+<th class=num>Pos</th><th class=num>Tech</th><th class=num>Opt</th></tr></thead>
+<tbody><tr>
+<td class="num temp {temp_class(ex['temperature'])}">{fmt(ex['temperature'])}</td>
+<td class="num temp {temp_class(ex['temp_univpct'])}">{fmt(ex['temp_univpct'], 0)}</td>
+<td class=num><span class="quad {ex.get('quad_cls', 'quad-none')}">{ex.get('quad_label', '·')}</span></td>
+<td class="num temp {temp_class(self1y)}">{fmt(self1y, 0)}</td>
+<td class="num temp {temp_class(ex.get('extech_selfpct_1y'))}">{fmt(ex.get('extech_selfpct_1y'), 0)}</td>
+<td class=num>{fmt(ex.get('score_positioning'))}</td>
+<td class=num>{fmt(ex.get('score_technical'))}</td>
+<td class=num>{fmt(ex.get('score_options'))}</td>
+</tr></tbody>
+</table>
+</div>
+
+<ol class=guide-steps>
+<li><b>Start with Univ %ile, not Temp.</b> {tk} shows a Temperature of
+{fmt(ex['temperature'])}, which on a 0–100 scale reads unremarkable. It is actually the
+<b>{_ord(ex['temp_univpct'])} percentile</b> of the {n} TMT names scored today. That is the
+single most common misreading of this dashboard.</li>
+
+<li><b>Then split the headline into its pillars.</b> The composite is averaging
+{story} — so {reading}. Averaging two opposite readings into one number is exactly what
+buries the information; the pillar columns are where it lives.</li>
+
+<li><b>Read the Setup tag as the shorthand for that split.</b> {tk} is tagged
+<span class="quad {ex.get('quad_cls', 'quad-none')}">{ex.get('quad_label', '·')}</span>.
+{html_escape(ex.get('quad_title', ''))}</li>
+
+<li><b>Look at which signals are driving it.</b> Hottest: {_sl(hot3) or '—'}. Coldest:
+{_sl(cold3) or '—'}. If one or two signals are carrying the whole pillar, the reading is
+thinner than the score implies — open the drill-down and check.</li>
+
+<li><b>Use self-history only to confirm, never to rank.</b> {tk} sits at {self_txt}.
+{confirm_txt}</li>
+</ol>
+</div>
+"""
+
+    return f"""
+<div class=panel>
+<h3>📖 How to read this dashboard</h3>
+<p class=hint>Written to answer one question: given ~{n} names and a wall of numbers, what
+should you actually look at, and in what order?</p>
+</div>
+
+<div class=panel>
+<h3>1 · Read the percentile, not the score</h3>
+<p>This is the single biggest source of confusion, and it is a property of the scale rather
+than of any particular name. Temperature is the weighted average of ~15 percentile signals.
+Averaging percentiles pulls the result toward the middle (the central limit at work), so the
+composite <b>never uses most of the 0–100 range</b>. Today's cross-section: {scale_stats}.
+Only <b>{pct_hot:.0f}%</b> of names sit at 70 or above and <b>{pct_cold:.0f}%</b> at 30 or
+below — and that has been true every year since 2016, so it is structural, not a quirk of
+today's tape.</p>
+<p>The practical consequence: a 0–100 number <i>looks</i> like a percentile and isn't one.
+The <b>Univ %ile</b> column, now next to Temp everywhere, is the real percentile. Today's
+translation:</p>
+<div class=table-wrap style="max-width:420px">
+<table class=rank>
+<thead><tr><th class=num>Temp of…</th><th class=num>…is really</th><th class=num>names at or above</th></tr></thead>
+<tbody>{map_rows}</tbody>
+</table>
+</div>
+<p class=hint>Univ %ile is a monotone re-scaling of Temp within each date, so it cannot change
+any ordering, IC or backtest result. Nothing about the model changed — only what is displayed.</p>
+</div>
+
+<div class=panel>
+<h3>2 · Not all three pillars are equal</h3>
+<p>The three bucket scores look symmetric on screen. They are not, and knowing which to lean on
+is most of the skill in using this tool.</p>
+<ul class=guide-list>
+<li><b>Positioning — lean on this one.</b> It is the only pillar that is strongly validated
+standalone: 1-month factor-neutral IC −0.022 (t −3.9), and its own decile long/short spread
+(+8.2%/yr, t 2.74) is <i>wider</i> than the full composite's (+4.8%/yr, t 1.47). When
+positioning and the headline disagree, positioning has the better track record. It carries
+0.50 of the composite.</li>
+<li><b>Technical — real but weak.</b> Standalone IC −0.011 (t −1.3); its own decile spread is
++1.9%/yr (t 0.41), i.e. indistinguishable from noise on its own. It earns its 0.20 weight by
+combining with positioning, not by standing alone. Most of the time it is the pillar dragging
+a headline toward the middle.</li>
+<li><b>Options — genuinely provisional.</b> Yahoo options history only begins 2026-05-12, which
+leaves <b>one</b> measurable non-overlapping 1-month period in the entire backtest. Its 0.30
+weight is a forward-looking prior, not a fitted result, and no claim on this dashboard about
+options is backed by out-of-sample evidence. Read it as color. That caveat also applies to the
+<b>{EXTECH_COL}</b> column, which is 37.5% options by construction.</li>
+</ul>
+<p class=hint>The model is frozen at V1.17 — none of this changes any weight. It changes where
+you should place your confidence when the pillars disagree.</p>
+</div>
+
+<div class=panel>
+<h3>3 · The Setup grid</h3>
+<p>Crowding and price direction interact, and the interaction is more informative than either
+alone. The <b>Setup</b> column crosses the positioning tercile with the technical tercile and
+tags only the four corners. Cell figures are the mean 1-month factor-neutral forward return
+over 121 non-overlapping periods, 2016–2026, with today's name count in brackets.</p>
+<div class=table-wrap style="max-width:640px">
+<table class=rank>
+<thead><tr><th></th><th class=num>Price weak</th><th class=num>Price strong</th></tr></thead>
+<tbody>
+<tr><th style="text-align:left">Positioning light</th>
+<td class=num><span class="quad quad-cool">Under-owned ↓</span><br><b>+3.7%/yr</b> (t 1.68) · [{_cnt('Under-owned ↓')}]</td>
+<td class=num><span class="quad quad-cool">Under-owned ↑</span><br><b>+2.6%/yr</b> (t 1.04) · [{_cnt('Under-owned ↑')}]</td></tr>
+<tr><th style="text-align:left">Positioning heavy</th>
+<td class=num><span class="quad quad-warm">Crowded ↓</span><br><b>−1.5%/yr</b> (t −0.70) · [{_cnt('Crowded ↓')}]</td>
+<td class=num><span class="quad quad-hot">Crowded ↑</span><br><b>−3.5%/yr</b> (t −1.86) · [{_cnt('Crowded ↑')}]</td></tr>
+</tbody>
+</table>
+</div>
+<p>The useful comparison is along the top-to-bottom axis: <b>within strong price action</b>,
+light-positioning names beat heavy-positioning names by <b>+6.1%/yr</b> (t 2.00). Strength
+itself is not the problem; strength that everyone already owns is.</p>
+<p class=hint><b>Honest caveat:</b> that cell was chosen after looking at a 3×3 grid on 121
+periods, so it carries a multiple-comparison discount, and the project's own walk-forward
+showed decile long/short spreads do not survive out-of-sample. Use the grid to orient and to
+generate ideas; do not treat these as expected returns. Middle terciles are left untagged
+because the middle of the grid showed nothing measurable.</p>
+</div>
+
+{example_html}
+
+<div class=panel>
+<h3>5 · What not to lean on</h3>
+<ul class=guide-list>
+<li><b>Self-history as a ranking.</b> <b>Self 1y</b> is uniform by construction — every name
+spends 10% of its days above its own 90th percentile whether or not it is genuinely crowded,
+so a chronically quiet name reads "extreme" just for being ordinary. In a regression with both,
+the cross-sectional score keeps its predictive sign and self-history goes to zero. Sort on Univ
+%ile; use Self 1y as a second opinion on names the sort already surfaced.</li>
+<li><b>The {EXTECH_COL} column as evidence.</b> Useful for separating crowding from price
+action, but 37.5% of it is the unvalidated options bucket, and before 2026-05-12 its trailing
+window is positioning-only — so a name can jump sharply the day options first enters its window.
+Directional color, not proof.</li>
+<li><b>Conviction.</b> Removed from the tables in V1.21. It was tested as a filter and did not
+work: composite IC was flat from no filter through conviction ≥70, then degraded at ≥80
+(t −1.65). Screening on bucket agreement threw away signal instead of sharpening it. The field
+is still computed and still in the CSV export; it is simply no longer given screen space.</li>
+<li><b>The tool as a standalone strategy.</b> In-sample IC {vs['is_ic']} (t {vs['is_t']}),
+walk-forward out-of-sample {vs['oos_ic']} (t {vs['oos_t']}). The rank signal partially survives
+out-of-sample; the decile long/short does not. This is an idea-generation and
+confirmation overlay for fundamental work — that is the honest ceiling on it.</li>
+</ul>
+</div>
+"""
+
+
 def render_glossary() -> str:
     return """
 <details open class=glossary>
@@ -1265,8 +1828,32 @@ def render_glossary() -> str:
 </div>
 
 <div class=gloss-card>
-<h4>Conviction (0–100)</h4>
-<p>How much the buckets <i>agree</i>. High conviction = all buckets pointing same way (all hot, or all cold). Low = mixed signals (e.g., extreme positioning but cold technicals, or hot options sentiment with washed-out positioning).</p>
+<h4>Short volume vs. days-to-cover (why they can disagree)</h4>
+<p>Two positioning signals that measure <b>different things</b> and often diverge:</p>
+<ul>
+<li><b>Short volume 14d ratio</b> — a <b>flow</b>: the short-marked share of each day's tape (FINRA Reg SHO), 14d avg. Mostly <b>market-maker hedging and intraday arb</b> that is flat by the close, so a high reading means heavy two-sided trading, not necessarily bearish bets.</li>
+<li><b>Short interest days-to-cover</b> — a <b>stock</b>: actual reported short interest (open shares held short) ÷ average daily volume. This is the real, accumulated short position and the more reliable crowding read. It falls when the open short book is small <i>or</i> the stock trades a lot (high turnover deflates days-to-cover).</li>
+</ul>
+<p><b>High short volume + low days-to-cover</b> (a heavily-churned name) = lots of short-marked prints crossing an active tape, but little settling into a crowded overnight short — <b>churned, not pressed short</b>. Lean on days-to-cover for actual positioning. Windows differ too: short volume is a fresh 14-day flow; days-to-cover uses the last bi-weekly short-interest settlement (~2–3 weeks lagged).</p>
+</div>
+
+<div class=gloss-card>
+<h4>Univ %ile (0–100)</h4>
+<p>Where the Temperature ranks against the <b>whole TMT universe today</b>. <b>Judge extremity on this column, not on raw Temp.</b> Temperature is an average of ~15 percentile signals, so the central limit compresses it toward 50 — std is only ~13 and the effective range is ~20–89, with just ~6% of names above 70 and ~6% below 30. That makes a 0–100 number <i>look</i> like a percentile without being one: a Temp of 38 is really a bottom-quintile reading, and 62 is already top-quartile.</p>
+<p>This is a monotone re-scaling of Temp on each date, so it cannot change any ranking, IC or backtest result — it changes only what you see.</p>
+</div>
+
+<div class=gloss-card>
+<h4>Setup (quadrant)</h4>
+<p>Positioning tercile × technical tercile, ranked across the universe today. The <b>word</b> says how crowded the name is; the <b>arrow</b> says which way price is going.</p>
+<ul>
+<li><span class="quad quad-hot">Crowded ↑</span> — heavy positioning, strong price. The most expensive place to add. Historically the worst cell: −3.5%/yr residual (t −1.86).</li>
+<li><span class="quad quad-warm">Crowded ↓</span> — heavy positioning, weak price. Crowded and rolling over: −1.5%/yr (t −0.70).</li>
+<li><span class="quad quad-cool">Under-owned ↑</span> — light positioning, strong price. Strength nobody is positioned for: +2.6%/yr (t 1.04).</li>
+<li><span class="quad quad-cool">Under-owned ↓</span> — light positioning, weak price. The classic washed-out setup, and the best cell: +3.7%/yr (t 1.68).</li>
+<li><span class="quad quad-none">·</span> — middle tercile on one or both axes. Deliberately unlabeled: the middle of the grid showed no measurable edge.</li>
+</ul>
+<p>Figures are mean 1-month factor-neutral forward returns over 121 non-overlapping periods, 2016–2026 — a description of the historical cell, not a forecast. Display-only; never feeds the composite, flags or backtest. Full walkthrough on the <b>📖 How to read it</b> tab.</p>
 </div>
 
 <div class=gloss-card>
@@ -1277,6 +1864,18 @@ def render_glossary() -> str:
 <div class=gloss-card>
 <h4>7d Δ (temperature change)</h4>
 <p>Today's temperature minus 5 trading days ago. <span class=chg-up>Red/positive</span> = heating up. <span class=chg-down>Green/negative</span> = cooling off (contrarian-favorable).</p>
+</div>
+
+<div class=gloss-card>
+<h4>Self 1y (vs own history)</h4>
+<p>Where today's Temperature sits within <b>this same name's</b> trailing <b>1-year</b> range — a percentile (0–100), colored like Temp (high = hot for itself, low = washed-out for itself). This is the fix for <b>structurally cool/hot names</b>: a large-cap semi can read a cool 40 vs the universe yet be at its own 1-year high (Self 1y ≈ 90) because positioning/options keep it quiet cross-sectionally. Cross-sectional Temp answers "hot vs other TMT names?"; Self 1y answers "hot <i>for itself</i>?" Hover a cell for the <b>z-score</b> (how many σ from its own norm — a 90th %ile on a near-flat name may still be only +0.5σ) and the <b>6-month</b> read. Per-bucket self-history (positioning / technical / options vs own 1y) appears in each name's drill-down. <b>Caveat:</b> options data starts 2026, so the 1-year <i>Temperature</i> baseline is partly pre-options and biased slightly cool; the positioning &amp; technical bucket self-histories (clean ~10y) are the robust reads until options accrues a full year.</p>
+</div>
+
+<div class=gloss-card>
+<h4>Self 1y P+O (ex-technicals)</h4>
+<p>The same self-vs-own-history percentile as <b>Self 1y</b>, but computed on a composite built from the <b>Positioning and Options pillars only</b> — every price/momentum-derived signal removed. Weights are the model's own (Pos 0.50, Opt 0.30) renormalized over the two kept pillars, i.e. <b>0.625 Pos / 0.375 Opt</b>.</p>
+<p><b>Why it's separate from Self 1y.</b> Temperature is 20% technicals, and technicals are the fastest-moving, most price-reflexive bucket — so a name can print a hot Self 1y mostly because it has rallied. This column answers the narrower question: <i>is the crowding and options-hedging setup extreme for this name, independent of how the stock has traded?</i> Read the two side by side — a <b>high Self 1y with a middling P+O</b> is a momentum-driven reading, while <b>both high</b> means positioning and price agree, which is the more complete late-cycle setup. The reverse (P+O hot, Self 1y cool) flags crowding that price hasn't confirmed yet.</p>
+<p><b>Caveat — composition break.</b> Options history only begins <b>2026-05-12</b>. To keep a genuine 252-day window, dates before that are scored on <b>positioning alone</b>, so today's blended value is ranked against a partly positioning-only past. Treat the level as directional rather than precise until options accrues a full year; the positioning pillar (clean ~10y) dominates the blend either way. Names with no options coverage at all show the positioning-only read.</p>
 </div>
 
 <div class=gloss-card>
@@ -1336,22 +1935,25 @@ def main(asof: str | None = None):
         for t in info["tickers"]:
             ticker_to_sectors.setdefault(t, []).append(sg)
 
-    # Panels
-    hottest = snap.dropna(subset=["temperature"]).nlargest(25, "temperature")
-    coldest = snap.dropna(subset=["temperature"]).nsmallest(25, "temperature")
-    movers_up = snap.dropna(subset=["temp_7d_chg"]).nlargest(20, "temp_7d_chg")
-    movers_down = snap.dropna(subset=["temp_7d_chg"]).nsmallest(20, "temp_7d_chg")
-    late_flagged = snap[snap["flag_late_signal"] == 1].sort_values("temperature", ascending=False)
-    wash_flagged = snap[snap["flag_washout"] == 1].sort_values("temperature")
-    earnings_soon = snap[snap["flag_earnings_soon"] == 1].sort_values("temperature", ascending=False)
-    new_late_df = snap[snap["ticker"].isin(data["new_late"])].sort_values("temperature", ascending=False)
-    new_wash_df = snap[snap["ticker"].isin(data["new_wash"])].sort_values("temperature")
+    # Panels. Ranking/flag panels draw from `rankable` (excludes new-listing /
+    # insufficient-history names so a fresh IPO can't top the board on artifact
+    # signals); All Names + drilldowns still use the full `snap`.
+    rankable = snap[~snap["thin_history"]] if "thin_history" in snap.columns else snap
+    hottest = rankable.dropna(subset=["temperature"]).nlargest(25, "temperature")
+    coldest = rankable.dropna(subset=["temperature"]).nsmallest(25, "temperature")
+    movers_up = rankable.dropna(subset=["temp_7d_chg"]).nlargest(20, "temp_7d_chg")
+    movers_down = rankable.dropna(subset=["temp_7d_chg"]).nsmallest(20, "temp_7d_chg")
+    late_flagged = rankable[rankable["flag_late_signal"] == 1].sort_values("temperature", ascending=False)
+    wash_flagged = rankable[rankable["flag_washout"] == 1].sort_values("temperature")
+    earnings_soon = rankable[rankable["flag_earnings_soon"] == 1].sort_values("temperature", ascending=False)
+    new_late_df = rankable[rankable["ticker"].isin(data["new_late"])].sort_values("temperature", ascending=False)
+    new_wash_df = rankable[rankable["ticker"].isin(data["new_wash"])].sort_values("temperature")
     watchlist_df = snap[snap["ticker"].isin(wl_tickers)].sort_values("temperature", ascending=False)
 
-    # KPI tile values
+    # KPI tile values (flag counts from rankable so they match the panels)
     kpi_total = len(snap)
-    kpi_late = int((snap["flag_late_signal"] == 1).sum())
-    kpi_wash = int((snap["flag_washout"] == 1).sum())
+    kpi_late = int((rankable["flag_late_signal"] == 1).sum())
+    kpi_wash = int((rankable["flag_washout"] == 1).sum())
     kpi_earnings = int((snap["flag_earnings_soon"] == 1).sum())
     kpi_new_late = len(new_late_df)
     kpi_new_wash = len(new_wash_df)
@@ -1411,12 +2013,25 @@ def main(asof: str | None = None):
             "ticker": r["ticker"],
             "name": (r.get("name") or "")[:40],
             "temp": float(r["temperature"]) if pd.notna(r["temperature"]) else None,
+            "univpct": float(r["temp_univpct"]) if pd.notna(r.get("temp_univpct")) else None,
             "chg7d": float(r["temp_7d_chg"]) if pd.notna(r.get("temp_7d_chg")) else None,
             "pos": float(r["score_positioning"]) if pd.notna(r.get("score_positioning")) else None,
             "tech": float(r["score_technical"]) if pd.notna(r.get("score_technical")) else None,
             "opt": float(r["score_options"]) if pd.notna(r.get("score_options")) else None,
-            "conv": float(r["conviction"]) if pd.notna(r.get("conviction")) else None,
             "anom": int(r["anomaly_count"]) if pd.notna(r.get("anomaly_count")) else None,
+            # V1.21 Setup quadrant. `quadrank` orders the column most-crowded to
+            # least so a sort walks Crowded ↑ -> Crowded ↓ -> untagged -> Under-owned.
+            "quad": r.get("quad_label") or "·",
+            "quadcls": r.get("quad_cls") or "quad-none",
+            "quadtitle": r.get("quad_title") or "",
+            "quadrank": QUAD_SORT_RANK.get(r.get("quad_label"), 0),
+            "self1y": float(r["temp_selfpct_1y"]) if pd.notna(r.get("temp_selfpct_1y")) else None,
+            "self6m": float(r["temp_selfpct_6m"]) if pd.notna(r.get("temp_selfpct_6m")) else None,
+            "selfz": float(r["temp_selfz_1y"]) if pd.notna(r.get("temp_selfz_1y")) else None,
+            # V1.20: ex-technical (positioning + options only) self-history
+            "xself1y": float(r["extech_selfpct_1y"]) if pd.notna(r.get("extech_selfpct_1y")) else None,
+            "xself6m": float(r["extech_selfpct_6m"]) if pd.notna(r.get("extech_selfpct_6m")) else None,
+            "xselfz": float(r["extech_selfz_1y"]) if pd.notna(r.get("extech_selfz_1y")) else None,
             "late": bool(r.get("flag_late_signal") == 1),
             "wash": bool(r.get("flag_washout") == 1),
             "earn": bool(r.get("flag_earnings_soon") == 1),
@@ -1426,10 +2041,14 @@ def main(asof: str | None = None):
         })
 
     # CSV
-    csv_data = snap[["ticker", "name", "temperature", "score_positioning",
-                     "score_valuation", "score_technical", "conviction",
-                     "anomaly_count", "temp_7d_chg",
-                     "flag_late_signal", "flag_washout", "flag_earnings_soon"]].fillna("")
+    csv_cols = ["ticker", "name", "temperature", "score_positioning",
+                "score_valuation", "score_technical", "conviction",
+                "anomaly_count", "temp_7d_chg",
+                "temp_selfpct_1y", "temp_selfpct_6m", "temp_selfz_1y",
+                "extech_selfpct_1y", "extech_selfpct_6m", "extech_selfz_1y",
+                "pos_selfpct_1y", "tech_selfpct_1y", "opt_selfpct_1y",
+                "flag_late_signal", "flag_washout", "flag_earnings_soon"]
+    csv_data = snap[[c for c in csv_cols if c in snap.columns]].fillna("")
     csv_text = csv_data.to_csv(index=False)
 
     sg_options = "<option value=''>All sectors</option>" + "".join(
@@ -1648,8 +2267,33 @@ tr:hover td {{ background: #f8fafc; }}
 .chg-up {{ color: var(--hot); }}
 .chg-down {{ color: var(--cold); }}
 
-/* Conv/anom muted */
-.conv, .anom {{ color: var(--text-muted); }}
+/* Anom muted */
+.anom {{ color: var(--text-muted); }}
+
+/* 📖 How to read it tab */
+.guide-list {{ line-height:1.7; padding-left:1.1rem; margin:0.5rem 0; }}
+.guide-list li {{ margin-bottom:0.6rem; }}
+.guide-steps {{ line-height:1.7; padding-left:1.3rem; margin:0.75rem 0 0; }}
+.guide-steps li {{ margin-bottom:0.75rem; }}
+.guide-example {{ background:var(--panel); border:1px solid var(--border);
+                 border-left:3px solid var(--primary); border-radius:8px;
+                 padding:1rem 1.25rem; margin-bottom:1rem; }}
+.guide-example h4 {{ margin:0 0 0.25rem; font-size:1rem; }}
+#tab-guide .panel p {{ line-height:1.7; }}
+
+/* Setup quadrant badges. Only the four corners are colored; the middle is a
+   deliberately faint dot so the eye skips it. */
+.quad {{ display:inline-block; padding:0.1rem 0.4rem; border-radius:4px;
+        font-size:0.6875rem; font-weight:600; white-space:nowrap; letter-spacing:0.01em; }}
+.quad-hot  {{ background:rgba(239,68,68,0.16);  color:#dc2626; }}
+.quad-warm {{ background:rgba(249,115,22,0.14); color:#ea580c; }}
+.quad-cool {{ background:rgba(34,197,94,0.14);  color:#16a34a; }}
+.quad-none {{ background:transparent; color:var(--text-muted); opacity:0.45; font-weight:400; }}
+@media (prefers-color-scheme: dark) {{
+  .quad-hot  {{ background:rgba(239,68,68,0.22);  color:#f87171; }}
+  .quad-warm {{ background:rgba(249,115,22,0.20); color:#fb923c; }}
+  .quad-cool {{ background:rgba(34,197,94,0.20);  color:#4ade80; }}
+}}
 
 /* Glossary */
 .glossary {{
@@ -1721,6 +2365,10 @@ tr:hover td {{ background: #f8fafc; }}
 .spark-meta {{ font-size: 0.7rem; color: var(--text-muted); margin-top: 0.2rem; }}
 .drilldown h4 {{ font-size: 0.875rem; font-weight: 600; color: var(--text); margin: 1rem 0 0.5rem 0; }}
 .drilldown table.signals th, .drilldown table.actions th {{ background: #f1f5f9; }}
+.thin-banner {{ background: #fef3c7; border: 1px solid #f6cf6b; border-radius: 6px; padding: 0.5rem 0.7rem; margin: 0 0 0.6rem 0; font-size: 0.85rem; line-height: 1.5; color: #7a5b00; }}
+.drilldown td.sig-label {{ cursor: help; }}
+.info-dot {{ color: var(--text-muted); font-size: 0.7rem; opacity: 0.55; }}
+td.sig-label:hover .info-dot {{ opacity: 1; }}
 .card {{ margin: 0.875rem 0; padding: 0.875rem 1rem; background: #f8fafc; border-radius: 6px; }}
 .overlay-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.625rem; margin-top: 0.5rem; }}
 .overlay-grid > div {{ display: flex; flex-direction: column; gap: 0.15rem; }}
@@ -1811,6 +2459,7 @@ tr:hover td {{ background: #f8fafc; }}
 <button class=tab data-tab=flags onclick=showTab('flags')>🚩 Flags</button>
 <button class=tab data-tab=watchlist onclick=showTab('watchlist')>👁️ Watchlist (<span id=watchCount>{len(watchlist_df)}</span>)</button>
 <button class=tab data-tab=book onclick=showTab('book')>📕 Book</button>
+<button class=tab data-tab=guide onclick=showTab('guide')>📖 How to read it</button>
 <button class=tab data-tab=backtest onclick=showTab('backtest')>📈 Backtest</button>
 <button class=tab data-tab=detail onclick=showTab('detail')>🔍 Detail (per-ticker)</button>
 </div>
@@ -1832,12 +2481,15 @@ tr:hover td {{ background: #f8fafc; }}
 <th title="Star to add/remove from watchlist">★</th>
 <th data-sort=ticker>Ticker</th>
 <th data-sort=name>Name</th>
-<th class=num data-sort=temp>Temp</th>
+<th class=num data-sort=temp title="Composite 0-100. Compressed by construction — sort/judge on Univ %ile beside it.">Temp</th>
+<th class=num data-sort=univpct title="{UNIVPCT_HDR_TITLE}">{UNIVPCT_COL}</th>
 <th class=num data-sort=chg7d>7d Δ</th>
-<th class=num data-sort=pos>Pos</th>
+<th class=num data-sort=quadrank title="{QUAD_HDR_TITLE}">Setup</th>
+<th class=num data-sort=self1y title="Temperature vs this name's OWN trailing 1-year range (percentile 0-100). High = hot for itself, low = washed-out for itself. Sort this to find structurally cool/hot names that are extreme relative to their own norm. Hover a cell for z-score + 6-month read.">Self 1y</th>
+<th class=num data-sort=xself1y title="{EXTECH_HDR_TITLE}">{EXTECH_COL}</th>
+<th class=num data-sort=pos title="Positioning &amp; crowding. Best-validated pillar — see the 📖 How to read it tab.">Pos</th>
 <th class=num data-sort=tech>Tech</th>
-<th class=num data-sort=opt>Opt</th>
-<th class=num data-sort=conv>Conv</th>
+<th class=num data-sort=opt title="Options sentiment. Small sample — see the 📖 How to read it tab.">Opt</th>
 <th class=num data-sort=anom>Anom</th>
 <th class=num data-sort=mcap_b title="Market cap ($B)">$B</th>
 <th>Flags</th>
@@ -1875,11 +2527,14 @@ tr:hover td {{ background: #f8fafc; }}
 <th>Ticker</th>
 <th>Name</th>
 <th class=num>Temp</th>
+<th class=num title="{UNIVPCT_HDR_TITLE}">{UNIVPCT_COL}</th>
 <th class=num>7d Δ</th>
-<th class=num>Pos</th>
+<th class=num title="{QUAD_HDR_TITLE}">Setup</th>
+<th class=num title="Temperature vs this name's own trailing 1-year range (percentile). High = hot for itself.">Self 1y</th>
+<th class=num title="{EXTECH_HDR_TITLE}">{EXTECH_COL}</th>
+<th class=num title="Positioning &amp; crowding. Best-validated pillar — see the 📖 How to read it tab.">Pos</th>
 <th class=num>Tech</th>
-<th class=num>Opt</th>
-<th class=num>Conv</th>
+<th class=num title="Options sentiment. Small sample — see the 📖 How to read it tab.">Opt</th>
 <th class=num>Anom</th>
 <th class=num title="Market cap ($B)">$B</th>
 <th>Flags</th>
@@ -1893,6 +2548,10 @@ tr:hover td {{ background: #f8fafc; }}
 <div class="tab-content" id=tab-book>
 {render_live_performance()}
 {render_model_book(snap)}
+</div>
+
+<div class="tab-content" id=tab-guide>
+{render_reading_guide(snap, data["sig_long"], vs)}
 </div>
 
 <div class="tab-content" id=tab-backtest>
@@ -1913,10 +2572,11 @@ tr:hover td {{ background: #f8fafc; }}
 <details class=footer-card>
 <summary><b>Methodology</b></summary>
 <div style="max-width:850px;line-height:1.6;color:var(--text-muted);font-size:0.8125rem;padding-top:0.5rem;">
-<p><b>Universe</b>: 366 TMT names (mcap ≥ $1.5B) drawn from theme_detector.</p>
+<p><b>Universe</b>: {kpi_total} TMT names (mcap ≥ $1.5B) drawn from theme_detector, plus hand-curated additions in <code>data/universe_manual_additions.csv</code>.</p>
 <p><b>Signals</b>: ~27 daily signals — 15 in the composite, the rest overlay-only. Inclusion driven by backtest IC sign (positive IC = trend-following, excluded from the contrarian composite).</p>
 <p><b>Percentile basis</b>: every composite signal (all three buckets) is a <b>50/50 blend</b> of the stock's own-5yr-history rank and its rank vs the full TMT universe today — so each percentile blends "extended vs its own norm?" with "extended vs peers right now?". Bucket scores are the (IC-weighted) average of their signals' percentiles.</p>
 <p><b>Composite</b>: weighted average of bucket scores (Pos 0.50 / Tech 0.20 / Opt 0.30), reweighted when a bucket is missing.</p>
+<p><b>Self-history columns</b>: <b>Self 1y</b> ranks today's Temperature against the same name's own trailing 252 trading days. <b>Self 1y P+O</b> does the same on a positioning+options-only composite (0.625 / 0.375 — technicals excluded), so the own-history read can be separated from price action. Options data begins 2026-05-12; earlier dates in that window are scored on positioning alone. Neither column feeds the composite or the backtest — they are read-outs, not model inputs.</p>
 <p><b>Backtest (V1.17)</b>: <b>1-month, factor-neutral, non-overlapping</b>. In-sample IC <b>{vs['is_ic']}</b> (t {vs['is_t']}). Walk-forward <b>out-of-sample IC {vs['oos_ic']}</b> (t {vs['oos_t']}): the rank signal partially survives but is weak/borderline; the decile long/short is unreliable out-of-sample. 3-month is insignificant. Numbers auto-computed by <code>tools/compute_validation_stats.py</code> (as of {vs['asof']}); weights tuned via <code>tools/tune_weights_1m.py</code> + <code>tools/bucket_weight_scan.py</code>. Options has no backtest history — its weight is a prior. See the 🧮 Methodology card.</p>
 <p><b>Limitations</b>: options bucket is live but unvalidated (no historical options data). Float uses a current snapshot across history (mild look-ahead). ETF flows + EPS revisions are forward-only. 13F has a 45-day lag and is long-only.</p>
 </div>
@@ -1954,11 +2614,14 @@ function rowHtml(r) {{
       <td><a href="#t-${{r.ticker}}" class=ticker-pill onclick="showTab('detail')">${{r.ticker}}</a></td>
       <td class=name>${{r.name}}</td>
       <td class="num temp ${{tempCls(r.temp)}}">${{fmt(r.temp, 1)}}</td>
+      <td class="num temp ${{tempCls(r.univpct)}}" title="${{r.univpct == null ? 'No composite temperature today.' : 'Temperature ranks at the ' + r.univpct.toFixed(0) + 'th percentile of the TMT universe today. Read this rather than the raw Temp — the composite is compressed toward 50 by averaging ~15 percentile signals.'}}">${{r.univpct == null ? '—' : r.univpct.toFixed(0)}}</td>
       <td class="num ${{r.chg7d > 0 ? 'chg-up' : r.chg7d < 0 ? 'chg-down' : ''}}">${{r.chg7d == null ? '—' : (r.chg7d >= 0 ? '+' : '') + r.chg7d.toFixed(1)}}</td>
+      <td class=num><span class="quad ${{r.quadcls}}" title="${{r.quadtitle}}">${{r.quad}}</span></td>
+      <td class="num temp ${{tempCls(r.self1y)}}" title="${{r.self1y == null ? 'No self-history yet' : 'Temp at its ' + r.self1y.toFixed(0) + 'th %ile vs own 1y' + (r.selfz == null ? '' : ' (' + (r.selfz>=0?'+':'') + r.selfz.toFixed(1) + 'σ)') + (r.self6m == null ? '' : ' · 6mo: ' + r.self6m.toFixed(0) + 'th') + '. High = hot for itself.'}}">${{r.self1y == null ? '—' : r.self1y.toFixed(0)}}</td>
+      <td class="num temp ${{tempCls(r.xself1y)}}" title="${{r.xself1y == null ? 'No self-history yet' : 'Positioning+Options blend at its ' + r.xself1y.toFixed(0) + 'th %ile vs own 1y' + (r.xselfz == null ? '' : ' (' + (r.xselfz>=0?'+':'') + r.xselfz.toFixed(1) + 'σ)') + (r.xself6m == null ? '' : ' · 6mo: ' + r.xself6m.toFixed(0) + 'th') + '. Technicals excluded (0.625 Pos / 0.375 Opt). Options history starts 2026-05-12 — earlier window is positioning-only.'}}">${{r.xself1y == null ? '—' : r.xself1y.toFixed(0)}}</td>
       <td class=num>${{fmt(r.pos, 1)}}</td>
       <td class=num>${{fmt(r.tech, 1)}}</td>
       <td class=num>${{fmt(r.opt, 1)}}</td>
-      <td class="num conv">${{fmt(r.conv, 1)}}</td>
       <td class="num anom">${{r.anom == null ? '—' : r.anom}}</td>
       <td class=num>${{r.mcap_b == null ? '—' : '$' + r.mcap_b.toFixed(1)}}</td>
       <td class=flagcol>${{r.late ? '🔥' : ''}}${{r.wash ? '❄️' : ''}}${{r.earn ? '📅' : ''}}</td>

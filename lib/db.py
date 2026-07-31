@@ -49,19 +49,27 @@ CREATE TABLE IF NOT EXISTS short_interest_true (
     PRIMARY KEY (ticker, settlement_date)
 );
 
+-- PK must contain ONLY columns the provider actually populates. openinsider
+-- leaves filer_cik and direct_indirect NULL on every row, and SQLite treats
+-- NULLs in a PK as distinct — so a PK containing filer_cik never matched, and
+-- `INSERT OR REPLACE` in setup/05_ingest_insider.py appended a full duplicate
+-- copy of the table on every daily run (2.7M rows for 77k transactions before
+-- this was caught). Keep NULLable columns OUT of this key.
+-- See tools/fix_insider_dupes.py for the migration.
 CREATE TABLE IF NOT EXISTS insider_form4 (
     accession      TEXT NOT NULL,
     ticker         TEXT NOT NULL,
     filer_cik      TEXT,
-    filer_name     TEXT,
+    filer_name     TEXT NOT NULL,
     relationship   TEXT,
-    transaction_date TEXT,
-    transaction_code TEXT,
-    shares         REAL,
-    price_per_share REAL,
+    transaction_date TEXT NOT NULL,
+    transaction_code TEXT NOT NULL,
+    shares         REAL NOT NULL,
+    price_per_share REAL NOT NULL,
     value_usd      REAL,
     direct_indirect TEXT,
-    PRIMARY KEY (accession, filer_cik, transaction_date, transaction_code, shares)
+    PRIMARY KEY (accession, ticker, transaction_date, transaction_code,
+                 shares, price_per_share, filer_name)
 );
 CREATE INDEX IF NOT EXISTS idx_insider_ticker_date ON insider_form4(ticker, transaction_date);
 
@@ -204,6 +212,29 @@ CREATE TABLE IF NOT EXISTS composite_daily (
     flag_washout    INTEGER,
     flag_divergence INTEGER,
     flag_earnings_soon INTEGER,
+    -- V1.18: self-vs-own-history. Percentile (0..100) + z (std-devs) of today's
+    -- score vs the SAME name's own trailing 1y (252d) / 6mo (126d) distribution.
+    -- High pct/z = hot for itself; low = cold for itself. Surfaces structurally
+    -- cool names (semis) that are unusual relative to their own norm.
+    temp_selfpct_1y REAL,
+    temp_selfpct_6m REAL,
+    temp_selfz_1y   REAL,
+    pos_selfpct_1y  REAL,
+    pos_selfpct_6m  REAL,
+    pos_selfz_1y    REAL,
+    tech_selfpct_1y REAL,
+    tech_selfpct_6m REAL,
+    tech_selfz_1y   REAL,
+    opt_selfpct_1y  REAL,
+    opt_selfpct_6m  REAL,
+    opt_selfz_1y    REAL,
+    -- V1.20: EX-TECHNICAL self-history. Same idea as temp_selfpct_*, but scored
+    -- off a composite built from the positioning + options buckets ONLY (their
+    -- config weights, renormalized) — i.e. the self-history read with all
+    -- price/momentum-derived signal stripped out.
+    extech_selfpct_1y REAL,
+    extech_selfpct_6m REAL,
+    extech_selfz_1y   REAL,
     PRIMARY KEY (ticker, date)
 );
 CREATE INDEX IF NOT EXISTS idx_composite_date_temp ON composite_daily(date, temperature);
@@ -291,11 +322,45 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
+# Columns added after the original composite_daily was created. CREATE TABLE
+# IF NOT EXISTS won't add columns to a table that already exists, so these are
+# applied via ALTER TABLE on existing DBs. (col_name, sql_type).
+_COMPOSITE_DAILY_ADDED_COLUMNS = [
+    ("temp_selfpct_1y", "REAL"), ("temp_selfpct_6m", "REAL"), ("temp_selfz_1y", "REAL"),
+    ("pos_selfpct_1y", "REAL"), ("pos_selfpct_6m", "REAL"), ("pos_selfz_1y", "REAL"),
+    ("tech_selfpct_1y", "REAL"), ("tech_selfpct_6m", "REAL"), ("tech_selfz_1y", "REAL"),
+    ("opt_selfpct_1y", "REAL"), ("opt_selfpct_6m", "REAL"), ("opt_selfz_1y", "REAL"),
+    ("extech_selfpct_1y", "REAL"), ("extech_selfpct_6m", "REAL"), ("extech_selfz_1y", "REAL"),
+]
+
+
+def migrate_schema(conn: sqlite3.Connection | None = None) -> list[str]:
+    """Idempotently add any missing columns to existing tables. Safe to call
+    every run. Returns the list of columns it added (empty if already current)."""
+    own = conn is None
+    if own:
+        conn = connect()
+    added = []
+    try:
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(composite_daily)")}
+        for col, sqltype in _COMPOSITE_DAILY_ADDED_COLUMNS:
+            if col not in existing:
+                conn.execute(f"ALTER TABLE composite_daily ADD COLUMN {col} {sqltype}")
+                added.append(col)
+        if added:
+            conn.commit()
+    finally:
+        if own:
+            conn.close()
+    return added
+
+
 def init_schema() -> None:
     conn = connect()
     try:
         conn.executescript(SCHEMA)
         conn.commit()
+        migrate_schema(conn)
     finally:
         conn.close()
 

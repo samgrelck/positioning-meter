@@ -16,6 +16,17 @@ from pathlib import Path
 # refresh — the failure mode that left half the universe stale on 2026-06-19.
 PER_TICKER_TIMEOUT_SEC = 90
 
+# Listing-date floors for RECYCLED tickers — symbols reassigned to a new company
+# whose pre-listing history on the data vendor belongs to a DIFFERENT security.
+# Without this, the vendor returns the old symbol's bars and silently corrupts
+# every history-based signal (returns, RSI, MAs, self-percentiles).
+#   SPCX: was "The SPAC and New Issue ETF" (2020-2023); reassigned to SpaceX
+#         (Space Exploration Technologies) at its 2026-06-12 IPO. Pre-IPO bars
+#         (~$21, ~28k vol) are the dead ETF, not SpaceX (~$167, ~170M vol).
+TICKER_START_OVERRIDES = {
+    "SPCX": date(2026, 6, 12),
+}
+
 
 class _TickerTimeout(Exception):
     pass
@@ -103,7 +114,8 @@ def main():
         try:
             signal.alarm(PER_TICKER_TIMEOUT_SEC)
             try:
-                rows = provider.fetch_prices(t, start, end)
+                t_start = max(start, TICKER_START_OVERRIDES[t]) if t in TICKER_START_OVERRIDES else start
+                rows = provider.fetch_prices(t, t_start, end)
             finally:
                 signal.alarm(0)  # always disarm, even on timeout/exception
             n = upsert_prices(conn, rows)

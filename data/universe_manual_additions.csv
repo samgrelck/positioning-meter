@@ -1,0 +1,3 @@
+ticker,name,sic_code,market_cap,exchange,cluster_id
+SPCX,Space Exploration Technologies Corp. (SpaceX) Class A,3761,2113403126345.16,XNAS,
+NFLX,Netflix Inc,7841,303613665287.74,XNAS,cluster_50

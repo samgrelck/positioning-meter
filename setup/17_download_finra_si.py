@@ -27,12 +27,30 @@ STATUS = project_path("logs/17_download_finra_si_status.json")
 LOG = project_path("logs/17_download_finra_si.log")
 
 
+def _prev_business_day(d: date) -> date:
+    """Roll a date back to the previous weekday (Mon-Fri).
+
+    FINRA's biweekly settlement date is the literal 15th / last-day of the
+    month UNLESS that falls on a weekend, in which case the position date is
+    the preceding business day (e.g. Sun 2026-05-31 -> Fri 2026-05-29, so the
+    file is shrt20260529.csv). The old code only ever tried the literal date,
+    so EVERY weekend-shifted period silently 404'd as "missing" and was never
+    ingested. Rare holiday-shifted settlements (a weekday that is an exchange
+    holiday) are still not covered here; the 42-day staleness alert in
+    tools/staleness_check.py is the backstop for those.
+    """
+    while d.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+        d -= timedelta(days=1)
+    return d
+
+
 def candidate_dates(start: date, end: date):
-    """Generate plausible biweekly settlement dates: 15th and last-day of each month."""
+    """Generate biweekly settlement dates: the 15th and last-day of each month,
+    each rolled back to the previous business day when it lands on a weekend."""
     d = date(start.year, start.month, 1)
     while d <= end:
         # ~15th of month
-        mid = date(d.year, d.month, 15)
+        mid = _prev_business_day(date(d.year, d.month, 15))
         if start <= mid <= end:
             yield mid
         # Last day of month
@@ -40,6 +58,7 @@ def candidate_dates(start: date, end: date):
             eom = date(d.year, 12, 31)
         else:
             eom = date(d.year, d.month + 1, 1) - timedelta(days=1)
+        eom = _prev_business_day(eom)
         if start <= eom <= end:
             yield eom
         # Advance to next month

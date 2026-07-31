@@ -15,6 +15,9 @@ env/
 # SQLite databases (recreate from ingestion)
 data/positioning.db
 data/positioning.db-*
+data/positioning.db.bak_*
+data/positioning*.db-shm
+data/positioning*.db-wal
 data/cache/
 
 # Backup files

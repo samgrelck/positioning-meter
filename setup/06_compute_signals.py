@@ -15,7 +15,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.config import load, project_path
 from lib.db import connect
 from lib.signals import loaders, technical, valuation, positioning
-from lib.signals.percentiles import pct_self_panel, pct_peer_panel
+from lib.signals.percentiles import (
+    pct_self_panel, pct_peer_panel, zscore_self_panel,
+)
 from lib.signals.composite import (
     assemble_buckets, assemble_composite, compute_flags,
     compute_conviction, compute_anomaly,
@@ -278,14 +280,68 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
     print(f"Buckets computed: {list(bucket_panels.keys())}")
     print("Assembling composite...")
     composite = assemble_composite(bucket_panels, cfg["composite"]["bucket_weights"])
+
+    # V1.20: EX-TECHNICAL composite — the positioning + options buckets only, at
+    # their config weights (assemble_composite renormalizes over the buckets it
+    # is handed, so 0.50/0.30 becomes 0.625/0.375). Never persisted as a score;
+    # it exists only to carry a self-vs-own-history percentile that is free of
+    # price/momentum-derived signal.
+    #
+    # min_buckets_present=1 (vs 2 for temperature) is deliberate: options data
+    # only begins 2026-05-12, so requiring both buckets would cap the whole
+    # series at ~50 trading days and make a "1y" percentile meaningless. With 1,
+    # the series runs the full history — positioning-only before options came
+    # online, pos+opt after. The cost is a composition break at that date (the
+    # same kind temperature already carries, since it was pos+tech pre-options);
+    # the dashboard discloses it in the column tooltip + glossary.
+    extech_buckets = {b: p for b, p in bucket_panels.items()
+                      if b in ("positioning", "options") and p is not None and not p.empty}
+    extech = (assemble_composite(extech_buckets, cfg["composite"]["bucket_weights"],
+                                 min_buckets_present=1)
+              if extech_buckets else pd.DataFrame())
+    print(f"Ex-technical composite: {list(extech_buckets.keys())} -> "
+          f"{extech.shape if not extech.empty else '(empty)'}")
     flags = compute_flags(composite, bucket_panels, cfg["composite"]["compound_flags"])
     print("Computing conviction + anomaly...")
     conviction = compute_conviction(bucket_panels)
     anomaly = compute_anomaly(pct_peer)
 
+    # ---- V1.18: self-vs-own-history percentiles + z ----
+    # Rank today's Temperature (and each bucket) against the SAME name's own
+    # trailing distribution, so a structurally cool name is flagged when it's
+    # hot/cold *for itself*. Two horizons: 1y headline + 6mo confirmation.
+    # NOTE: the options bucket is forward-only (data from 2026), so temp_self*
+    # carries a one-time downward step where options came online — the
+    # positioning/technical self-history (clean ~10y) is the robust read until
+    # options accrues a full year. (See config.yaml / QUESTIONS.md.)
+    sh_cfg = cfg["composite"].get("self_history", {})
+    w_1y = sh_cfg.get("primary_window_days", 252)
+    w_6m = sh_cfg.get("secondary_window_days", 126)
+    print(f"Computing self-history (1y={w_1y}d, 6mo={w_6m}d) for temperature + buckets...")
+    self_hist_inputs = {
+        "temp": composite,
+        "pos": bucket_panels.get("positioning"),
+        "tech": bucket_panels.get("technical"),
+        "opt": bucket_panels.get("options"),
+        # V1.20: positioning+options blend — "Self 1y" with technicals stripped out
+        "extech": extech,
+    }
+    self_hist_panels: dict[str, pd.DataFrame] = {}
+    for prefix, panel in self_hist_inputs.items():
+        if panel is None or panel.empty:
+            continue
+        self_hist_panels[f"{prefix}_selfpct_1y"] = pct_self_panel(panel, w_1y)
+        self_hist_panels[f"{prefix}_selfpct_6m"] = pct_self_panel(panel, w_6m)
+        self_hist_panels[f"{prefix}_selfz_1y"] = zscore_self_panel(panel, w_1y)
+
     # Persist to SQLite — clear old rows first so dropped signals don't linger
     write_status({"phase": "persist"})
     conn = connect()
+    # Ensure the self-history columns exist on pre-V1.18 databases.
+    from lib.db import migrate_schema
+    added_cols = migrate_schema(conn)
+    if added_cols:
+        print(f"Migrated composite_daily: added {len(added_cols)} columns ({', '.join(added_cols)})")
     print("Clearing stale rows in signals_daily and composite_daily...")
     conn.execute("DELETE FROM signals_daily")
     conn.execute("DELETE FROM composite_daily")
@@ -354,6 +410,13 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
             f_long.columns = ["date", "ticker", fname]
             comp_long = comp_long.merge(f_long, on=["date", "ticker"], how="left")
 
+        # V1.18: self-vs-own-history columns (merge while date is still a
+        # Timestamp — the stringify happens further below).
+        for col_name, sh_panel in self_hist_panels.items():
+            sh_long = sh_panel.stack(future_stack=True).rename(col_name).reset_index()
+            sh_long.columns = ["date", "ticker", col_name]
+            comp_long = comp_long.merge(sh_long, on=["date", "ticker"], how="left")
+
         # Earnings-soon flag from earnings_calendar (global, not per-date)
         try:
             eearn = pd.read_sql_query(
@@ -369,21 +432,31 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
         comp_long["flag_earnings_soon"] = ((days_to_earnings >= 0) & (days_to_earnings <= 14)).astype(int)
         comp_long.drop(columns=["next_earnings_date"], inplace=True)
 
+        self_hist_cols = [
+            "temp_selfpct_1y", "temp_selfpct_6m", "temp_selfz_1y",
+            "pos_selfpct_1y", "pos_selfpct_6m", "pos_selfz_1y",
+            "tech_selfpct_1y", "tech_selfpct_6m", "tech_selfz_1y",
+            "opt_selfpct_1y", "opt_selfpct_6m", "opt_selfz_1y",
+            "extech_selfpct_1y", "extech_selfpct_6m", "extech_selfz_1y",
+        ]
         for col in ["score_positioning", "score_options", "score_flows",
                     "score_valuation", "score_technical",
                     "conviction", "anomaly_count",
-                    "flag_late_signal", "flag_washout", "flag_divergence", "flag_earnings_soon"]:
+                    "flag_late_signal", "flag_washout", "flag_divergence",
+                    "flag_earnings_soon"] + self_hist_cols:
             if col not in comp_long.columns:
                 comp_long[col] = None
 
         comp_long["date"] = comp_long["date"].dt.strftime("%Y-%m-%d") if hasattr(comp_long["date"], "dt") else comp_long["date"].astype(str)
+        # NaN -> None so SQLite stores NULL (not the string 'nan')
+        comp_long = comp_long.where(pd.notnull(comp_long), None)
         rows = comp_long[[
             "ticker", "date", "temperature",
             "score_positioning", "score_options", "score_flows",
             "score_valuation", "score_technical",
             "conviction", "anomaly_count",
             "flag_late_signal", "flag_washout", "flag_divergence", "flag_earnings_soon",
-        ]].to_dict("records")
+        ] + self_hist_cols].to_dict("records")
         conn.executemany(
             """
             INSERT OR REPLACE INTO composite_daily
@@ -391,12 +464,22 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
                  score_positioning, score_options, score_flows,
                  score_valuation, score_technical,
                  conviction, anomaly_count,
-                 flag_late_signal, flag_washout, flag_divergence, flag_earnings_soon)
+                 flag_late_signal, flag_washout, flag_divergence, flag_earnings_soon,
+                 temp_selfpct_1y, temp_selfpct_6m, temp_selfz_1y,
+                 pos_selfpct_1y, pos_selfpct_6m, pos_selfz_1y,
+                 tech_selfpct_1y, tech_selfpct_6m, tech_selfz_1y,
+                 opt_selfpct_1y, opt_selfpct_6m, opt_selfz_1y,
+                 extech_selfpct_1y, extech_selfpct_6m, extech_selfz_1y)
             VALUES (:ticker, :date, :temperature,
                     :score_positioning, :score_options, :score_flows,
                     :score_valuation, :score_technical,
                     :conviction, :anomaly_count,
-                    :flag_late_signal, :flag_washout, :flag_divergence, :flag_earnings_soon)
+                    :flag_late_signal, :flag_washout, :flag_divergence, :flag_earnings_soon,
+                    :temp_selfpct_1y, :temp_selfpct_6m, :temp_selfz_1y,
+                    :pos_selfpct_1y, :pos_selfpct_6m, :pos_selfz_1y,
+                    :tech_selfpct_1y, :tech_selfpct_6m, :tech_selfz_1y,
+                    :opt_selfpct_1y, :opt_selfpct_6m, :opt_selfz_1y,
+                    :extech_selfpct_1y, :extech_selfpct_6m, :extech_selfz_1y)
             """,
             rows,
         )

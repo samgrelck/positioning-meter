@@ -49,6 +49,27 @@ def pct_self_panel(values: pd.DataFrame, window_days: int) -> pd.DataFrame:
     return values.apply(lambda s: rolling_percentile_rank(s, window_days))
 
 
+def rolling_zscore(series: pd.Series, window: int) -> pd.Series:
+    """Rolling z-score (in std-devs) of the latest value vs its trailing window.
+
+    Companion to rolling_percentile_rank: the percentile says *where in the range*
+    today sits, the z-score says *how far from typical* in std-devs (so a 95th-%ile
+    reading on a near-flat series is correctly seen as a small move, z~0.5, not a
+    big one). Window includes today, matching the percentile convention. Returns
+    NaN where the trailing window has zero dispersion (constant series)."""
+    roll = series.rolling(window=window, min_periods=max(20, window // 5))
+    mu = roll.mean()
+    sigma = roll.std(ddof=0)
+    return (series - mu) / sigma.replace(0, np.nan)
+
+
+def zscore_self_panel(values: pd.DataFrame, window_days: int) -> pd.DataFrame:
+    """Apply rolling z-score to each ticker (column) independently."""
+    if values.empty:
+        return values
+    return values.apply(lambda s: rolling_zscore(s, window_days))
+
+
 def pct_peer_panel(values: pd.DataFrame, ticker_to_cluster: dict[str, str],
                     min_cluster_size: int = 3, blend_universe: float = 0.5,
                     ticker_to_clusters: dict[str, list[str]] | None = None,

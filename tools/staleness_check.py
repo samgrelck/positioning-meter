@@ -13,6 +13,7 @@ Usage:
 """
 import os
 import sys
+import time
 import sqlite3
 import smtplib
 from datetime import datetime, date
@@ -27,13 +28,15 @@ SMTP_SERVER, SMTP_PORT = "smtp.gmail.com", 587
 
 # (label, table, date_column, max_age_days). Thresholds allow for cadence +
 # publication lag (e.g. FINRA biweekly SI settles every ~2wks and publishes
-# ~8 business days later, so it can legitimately be ~30 days old).
+# ~8-9 business days later; combined with holiday-shifted settlement dates it
+# can legitimately reach ~38-40 days old before fresh data even exists, so the
+# threshold is 42d to avoid false alarms during the normal dissemination lag).
 FEED_CHECKS = [
     ("Composite (dashboard data)", "composite_daily",     "date",            4),
     ("Prices",                     "prices",              "date",            4),
     ("Estimates",                  "estimates_daily",     "date",            14),
     ("Short volume (FINRA daily)", "short_interest",      "settlement_date", 21),
-    ("Short interest (FINRA SI)",  "short_interest_true", "settlement_date", 35),
+    ("Short interest (FINRA SI)",  "short_interest_true", "settlement_date", 42),
 ]
 
 
@@ -122,7 +125,7 @@ def collect_issues():
     return issues
 
 
-def send_email(subject, body):
+def send_email(subject, body, *, retries=3, retry_delay=15):
     user = os.environ.get("SMTP_USERNAME")
     pw = os.environ.get("SMTP_PASSWORD")
     to = os.environ.get("EMAIL_TO")
@@ -133,11 +136,29 @@ def send_email(subject, body):
     msg["Subject"] = subject
     msg["From"] = user
     msg["To"] = to
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
-        s.starttls()
-        s.login(user, pw)
-        s.send_message(msg)
-    print(f"Alert emailed to {to}.")
+    # The 7:30am check often runs seconds after a scheduled wake, when the
+    # network/DNS isn't up yet — that surfaced as an unhandled socket.gaierror
+    # ("nodename nor servname provided") that crashed the whole check. Retry a
+    # few times for transient network/SMTP errors, with a connect timeout, and
+    # on final failure log cleanly instead of dumping a traceback (the issues
+    # are still printed to the log above regardless of email success).
+    last_err = None
+    for attempt in range(1, retries + 1):
+        try:
+            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as s:
+                s.starttls()
+                s.login(user, pw)
+                s.send_message(msg)
+            print(f"Alert emailed to {to}.")
+            return
+        except (smtplib.SMTPException, OSError) as e:
+            last_err = e
+            if attempt < retries:
+                print(f"Email attempt {attempt}/{retries} failed ({e}); "
+                      f"retrying in {retry_delay}s...", file=sys.stderr)
+                time.sleep(retry_delay)
+    print(f"Email alert FAILED after {retries} attempts (last error: {last_err}); "
+          f"check above for the issue list.", file=sys.stderr)
 
 
 def main():

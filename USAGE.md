@@ -52,18 +52,51 @@ python3 setup/18_ingest_finra_si.py       # Parse + ingest (auto-drops pre-June-
 ./tools/deploy.sh                          # Re-render with new data
 ```
 
-### Quarterly extras (run after earnings season)
+### Quarterly (after each 13F filing deadline)
+
+13Fs file 45 days after quarter-end. Mark on your calendar:
+
+| Quarter ends | 13Fs filed by | Refresh on/after |
+|---|---|---|
+| Mar 31 | May 15 | mid-May |
+| Jun 30 | Aug 14 | mid-Aug |
+| Sep 30 | Nov 14 | mid-Nov |
+| Dec 31 | Feb 14 | mid-Feb |
 
 ```bash
 cd ~/Documents/AI\ workflows/positioning_meter
-python3 setup/12_ingest_13f.py             # 13Fs file 45 days post quarter-end
-python3 setup/03_ingest_financials.py     # Polygon quarterly financials
+python3 setup/12_ingest_13f.py             # Fresh quarter's 13Fs
+python3 setup/03_ingest_financials.py      # Polygon quarterly financials
 ./tools/deploy.sh
 ```
 
+### Annually (~once a year)
+
+| Task | Why | Command |
+|---|---|---|
+| Re-tune within-bucket signal weights | Backtest history grows; IC estimates improve | `python3 tools/tune_signal_weights.py` |
+| Re-grid-search bucket weights | Same | `python3 tools/tune_weights.py` |
+| Refresh HF curated list | New funds open, old ones close | `python3 setup/11_build_hf_list.py` |
+| Refresh CUSIP→ticker map | SEC publishes new 13F securities list | `python3 setup/10_build_cusip_map.py` |
+| Refresh universe | New IPOs added to theme_detector | `python3 setup/01_build_universe.py` |
+
+After any annual retune: `python3 setup/06_compute_signals.py && ./tools/deploy.sh`
+
+### Trigger-based (rare)
+
+- Universe changes in theme_detector → rerun `setup/01_build_universe.py`
+- Acquired Polygon Options Advanced subscription → run `setup/16_ingest_options_polygon.py`
+- Found alternative pre-June-2021 SI source → would need new ingestion script
+
+### What never needs updating
+- `data/sector_groups.json` (hand-curated, edit only if changing taxonomy)
+- `data/hf_filers.csv` (edit only when adding/removing HFs)
+- `config.yaml` (edit only when retuning manually)
+- `lib/`, `providers/` code (edit only when changing methodology)
+
 ### Honest take
 
-If you're using this for daily decisions, **`./tools/refresh_data.sh` whenever you want a fresh view** is the right pattern. Don't sweat the weekly/quarterly extras — those signals (13F, short interest level, financials) move slowly. Missing a week of those data updates won't meaningfully change the temperature reads.
+If you're using this for daily decisions, **`./tools/refresh_data.sh` whenever you want a fresh view** is the right pattern. Don't sweat the weekly/quarterly extras — those signals (13F, short interest level, financials) move slowly. Missing a week of those data updates won't meaningfully change the temperature reads. The 4 quarterly 13F refreshes per year are the most important non-daily updates to actually do on schedule.
 
 ---
 

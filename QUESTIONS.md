@@ -79,6 +79,13 @@ Append-only — when resolved, mark with ✅ and a brief note rather than deleti
 
 ## Things to investigate / verify
 
+### `float_turnover_20d` uses the LATEST float for all history — costs backtest coverage on delisted names
+- **Found as a side effect of V1.22.** `loaders.load_float()` returns the float from `MAX(asof_date)` in `share_float`, i.e. the current weekly yfinance pull, and that one number divides the entire 10y volume history. Names not in the *current* universe pull (delisted) therefore get no float at all, so no `float_turnover_20d`.
+- **Why it surfaced now:** zeroing `insider_net_90d_signed` removed the one positioning signal that still had coverage for those names. Positioning had been surviving on insider alone for them; without it the bucket goes NaN, and `min_buckets_present=2` then nulls the composite (options is empty pre-2026, so only technical remains).
+- **Size of it:** `composite_daily` 756,202 → 737,945 rows (−2.4%), concentrated in ~17 tickers — VISN −2050, Q −1997, P −1807, NATL −1738, IHS −1320. Today's board is unaffected (all 367 names scored).
+- **Why it's not being reverted:** the alternative is keeping an 11.4% weight on a t −0.51 size proxy purely to preserve rows on dead tickers.
+- **Real fix if it matters:** make float point-in-time (store the snapshot per date and `ffill`) rather than one current scalar. That would also fix the smaller existing distortion where today's float is applied to 2016 volumes. **Mild survivorship concern** for the backtest sample — delisted names dropping out is the direction that flatters results — so worth doing before leaning harder on the historical numbers.
+
 ### Composite weakness — technical bucket has mixed-direction signals
 - **Finding from V1 backtest:** composite IC ≈ 0 at 1m fwd; bot-decile hit rate only 54% (slightly above 50% baseline).
 - **Root cause:** technical bucket aggregates contrarian signals (RSI, ret_3m, pct_from_52w_high) with trend signals (ret_12m, rs_vs_qqq_3m, rs_vs_xlk_3m). They cancel each other out.

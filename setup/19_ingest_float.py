@@ -31,11 +31,25 @@ def fetch(ticker: str, sleep: float = 0.4):
         time.sleep(sleep)
         fl = info.get("floatShares")
         so = info.get("sharesOutstanding")
+        ih = info.get("heldPercentInstitutions")
         fl = float(fl) if fl else None
         so = float(so) if so else None
+        # V1.22: all-13F-filer institutional ownership, kept as DRILL-DOWN CONTEXT
+        # ONLY. It is not a crowding proxy and must not be used as one: on the
+        # first full pull the universe median was 92% of shares outstanding with a
+        # 75th percentile of 102% and a max of 128% — yfinance divides 13F shares
+        # by a share count that disagrees with its own — and because nearly every
+        # TMT name is 60-95% institutionally held it does not discriminate. It
+        # ranks -0.21 against log market cap, i.e. backwards for this purpose. The
+        # dashboard's ownership guard uses hf_count_13f instead; see
+        # load_ownership_pctile in setup/08_render_dashboard.py.
+        # Reject the impossible values rather than store them.
+        ih = float(ih) if ih not in (None, "") else None
+        if ih is not None and not (0.0 <= ih <= 1.0):
+            ih = None
         if not fl and not so:
             return None
-        return {"float_shares": fl, "shares_out": so}
+        return {"float_shares": fl, "shares_out": so, "inst_held_pct": ih}
     except Exception:
         return None
 
@@ -56,12 +70,14 @@ def main():
             if r:
                 conn.execute(
                     """INSERT OR REPLACE INTO share_float
-                       (ticker, asof_date, float_shares, shares_out)
-                       VALUES (?, ?, ?, ?)""",
-                    (t, today, r["float_shares"], r["shares_out"]),
+                       (ticker, asof_date, float_shares, shares_out, inst_held_pct)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (t, today, r["float_shares"], r["shares_out"], r["inst_held_pct"]),
                 )
                 written += 1
-                logf.write(f"  {t:8s} float={r['float_shares'] or 0:>16,.0f} so={r['shares_out'] or 0:>16,.0f}\n")
+                logf.write(f"  {t:8s} float={r['float_shares'] or 0:>16,.0f} "
+                           f"so={r['shares_out'] or 0:>16,.0f} "
+                           f"inst={(r['inst_held_pct'] or 0) * 100:>5.1f}%\n")
             else:
                 failures.append(t)
             if i % 10 == 0 or i == len(tickers):

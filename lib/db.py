@@ -165,6 +165,11 @@ CREATE TABLE IF NOT EXISTS share_float (
     asof_date     TEXT NOT NULL,
     float_shares  REAL,
     shares_out    REAL,
+    -- V1.22: fraction of shares held by institutions, all 13F filers (yfinance
+    -- heldPercentInstitutions). Distinct from the inst_own_pct overlay, which is
+    -- our 40-fund curated hedge-fund list only. Snapshot, forward-only — it
+    -- backs the dashboard's "well-held" ownership guard, never the composite.
+    inst_held_pct REAL,
     PRIMARY KEY (ticker, asof_date)
 );
 
@@ -325,13 +330,18 @@ def connect() -> sqlite3.Connection:
 # Columns added after the original composite_daily was created. CREATE TABLE
 # IF NOT EXISTS won't add columns to a table that already exists, so these are
 # applied via ALTER TABLE on existing DBs. (col_name, sql_type).
-_COMPOSITE_DAILY_ADDED_COLUMNS = [
-    ("temp_selfpct_1y", "REAL"), ("temp_selfpct_6m", "REAL"), ("temp_selfz_1y", "REAL"),
-    ("pos_selfpct_1y", "REAL"), ("pos_selfpct_6m", "REAL"), ("pos_selfz_1y", "REAL"),
-    ("tech_selfpct_1y", "REAL"), ("tech_selfpct_6m", "REAL"), ("tech_selfz_1y", "REAL"),
-    ("opt_selfpct_1y", "REAL"), ("opt_selfpct_6m", "REAL"), ("opt_selfz_1y", "REAL"),
-    ("extech_selfpct_1y", "REAL"), ("extech_selfpct_6m", "REAL"), ("extech_selfz_1y", "REAL"),
-]
+_ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
+    "composite_daily": [
+        ("temp_selfpct_1y", "REAL"), ("temp_selfpct_6m", "REAL"), ("temp_selfz_1y", "REAL"),
+        ("pos_selfpct_1y", "REAL"), ("pos_selfpct_6m", "REAL"), ("pos_selfz_1y", "REAL"),
+        ("tech_selfpct_1y", "REAL"), ("tech_selfpct_6m", "REAL"), ("tech_selfz_1y", "REAL"),
+        ("opt_selfpct_1y", "REAL"), ("opt_selfpct_6m", "REAL"), ("opt_selfz_1y", "REAL"),
+        ("extech_selfpct_1y", "REAL"), ("extech_selfpct_6m", "REAL"), ("extech_selfz_1y", "REAL"),
+    ],
+    # V1.22 — all-13F-filer institutional ownership, backs the dashboard's
+    # ownership guard on the Setup tag.
+    "share_float": [("inst_held_pct", "REAL")],
+}
 
 
 def migrate_schema(conn: sqlite3.Connection | None = None) -> list[str]:
@@ -342,11 +352,14 @@ def migrate_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         conn = connect()
     added = []
     try:
-        existing = {row[1] for row in conn.execute("PRAGMA table_info(composite_daily)")}
-        for col, sqltype in _COMPOSITE_DAILY_ADDED_COLUMNS:
-            if col not in existing:
-                conn.execute(f"ALTER TABLE composite_daily ADD COLUMN {col} {sqltype}")
-                added.append(col)
+        for table, cols in _ADDED_COLUMNS.items():
+            existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+            if not existing:
+                continue  # table not created yet; SCHEMA will build it current
+            for col, sqltype in cols:
+                if col not in existing:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {sqltype}")
+                    added.append(f"{table}.{col}")
         if added:
             conn.commit()
     finally:

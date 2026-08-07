@@ -43,12 +43,20 @@ def load_float() -> pd.Series:
 
 def load_inst_own_pct() -> pd.Series:
     """Institutional ownership fraction per ticker (Series, index=ticker):
-    sum of latest-quarter 13F shares / shares_out. LOW = retail-heavy. Overlay
-    only (13F is quarterly + 45d lagged)."""
+    sum of latest-COMPLETE-quarter 13F shares / shares_out. LOW = retail-heavy.
+    Overlay only (13F is quarterly + 45d lagged).
+
+    We anchor to the latest quarter with a full filer set (>=10 distinct filers),
+    NOT MAX(period_end): a single early filer creates a sparse current quarter
+    weeks before the 45-day deadline, and using it would silently compute this
+    overlay from one filer instead of the complete prior quarter."""
     conn = connect()
     hf = pd.read_sql_query(
         "SELECT ticker, SUM(shares) AS inst_shares FROM holdings_13f "
-        "WHERE period_end = (SELECT MAX(period_end) FROM holdings_13f) GROUP BY ticker",
+        "WHERE period_end = ("
+        "  SELECT period_end FROM holdings_13f GROUP BY period_end "
+        "  HAVING COUNT(DISTINCT filer_cik) >= 10 ORDER BY period_end DESC LIMIT 1"
+        ") GROUP BY ticker",
         conn,
     )
     so = pd.read_sql_query(
@@ -139,6 +147,72 @@ def load_universe() -> pd.DataFrame:
     from ..config import load, project_path
     cfg = load()
     return pd.read_csv(project_path(cfg["universe"]["output_csv"]))
+
+
+def load_market_cap_panel(closes: pd.DataFrame) -> pd.DataFrame:
+    """Size panel (date x ticker) for the V1.22 size-neutral rank.
+
+    mcap_t = current market cap x (adj_close_t / latest adj_close)
+
+    i.e. today's market cap walked backwards along the split- and dividend-
+    adjusted price path. Used only to ORDER names by size when neutralizing the
+    cross-sectional rank (see percentiles.size_neutral_rank), so it has to get
+    relative size right, not absolute dollars.
+
+    Why not close x shares_out from fundamentals_q, which would be the textbook
+    construction: `prices.close` is already split-adjusted (Polygon returns
+    adjusted bars — close == adj_close), while `fundamentals_q.shares_out` is
+    as-reported at the time. Multiplying the two mixes bases and breaks badly on
+    any split — NVDA's 2021 count of 628m against a post-40:1-adjusted price
+    read as a $4bn company. That table also carries duplicate period_end rows
+    with conflicting counts and outright junk (CRWD 2026-01-31 = 671,000).
+
+    The cost of this construction is that share-count drift (buybacks, issuance)
+    is ignored, and today's count is used for the whole history. That is a mild
+    look-ahead in the share count only — the price path, which dominates size
+    ordering over a decade, stays strictly point-in-time, so a name that grew
+    into a mega cap still reads small in its early years. Names are NaN before
+    their first traded date and simply keep the plain universe rank there.
+    """
+    from ..config import project_path
+
+    px = closes.sort_index()
+    last_px = px.ffill().iloc[-1]
+
+    # Anchor share count: prefer share_float.shares_out (refreshed weekly by
+    # setup/19_ingest_float.py, and already trusted as the float-turnover
+    # divisor). universe.csv market_cap is the fallback — it is Polygon-sourced
+    # and runs ~2x light on names that have split or re-rated (PANW, CRWD, FTNT,
+    # DDOG all read half their traded value there), which would under-neutralize
+    # exactly the large caps this correction exists to handle.
+    conn = connect()
+    so = pd.read_sql_query(
+        "SELECT ticker, shares_out FROM share_float "
+        "WHERE asof_date = (SELECT MAX(asof_date) FROM share_float) AND shares_out > 0",
+        conn,
+    )
+    conn.close()
+    shares = pd.Series(dtype=float)
+    if not so.empty:
+        shares = pd.Series(so["shares_out"].values, index=so["ticker"]).dropna()
+
+    anchor = (last_px.reindex(shares.index) * shares).dropna()
+    try:
+        uni = pd.read_csv(project_path("data/universe.csv")).set_index("ticker")["market_cap"]
+        uni = uni[uni > 0]
+        anchor = anchor.reindex(anchor.index.union(uni.index))
+        anchor = anchor.fillna(uni)
+    except Exception:
+        pass
+    anchor = anchor.dropna()
+
+    cols = [c for c in px.columns if c in anchor.index]
+    if not cols:
+        return pd.DataFrame()
+
+    scale = (anchor.reindex(cols) / last_px.reindex(cols)).replace([np.inf, -np.inf], np.nan)
+    mcap = px[cols].mul(scale, axis=1)
+    return mcap.where(mcap > 0)
 
 
 def load_options_panels(prices_index: pd.DatetimeIndex) -> dict[str, pd.DataFrame]:

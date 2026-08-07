@@ -2,7 +2,7 @@
 
 A daily-run **sentiment / positioning** analysis tool for individual TMT stocks.
 
-Measures how **crowded, hot, and stretched** each name is via the positioning bucket (insider, short interest, 13F), technical bucket (sentiment via price action: momentum, RSI, distance from MAs), and options bucket (IV rank, skew, term slope, P/C ratio). Valuation is shown as overlay context but excluded from the composite — fundamental analysis is done separately.
+Measures how **crowded, hot, and stretched** each name is via the positioning bucket (short volume, days-to-cover, float turnover — all size-neutralized as of V1.22), technical bucket (sentiment via price action: momentum, RSI, distance from MAs), and options bucket (IV rank, skew, term slope, P/C ratio). Valuation is shown as overlay context but excluded from the composite — fundamental analysis is done separately.
 
 ---
 
@@ -45,13 +45,15 @@ open ~/Documents/AI\ workflows/positioning_meter/data/dashboard.html
 
 366 TMT names, market cap ≥ $1.5B, drawn from sister `theme_detector` project. Theme_detector clusters serve as peer groups for cross-sectional percentile ranking.
 
-## Backtest results (V1.13)
+## Backtest results (V1.13; composite figures restated V1.22)
 
 - Composite IC **−0.034** at 3-month forward (Spearman)
 - Decile spread **−2.4%** (top minus bottom decile mean fwd return)
 - Bottom decile hit rate **59%** (positive forward return when temperature is low)
-- Bucket weights: **Positioning 0.40 / Technical 0.25 / Options 0.35** (positioning-leaning per conceptual prior)
+- Bucket weights: **Positioning 0.50 / Technical 0.20 / Options 0.30** (V1.15, ~IC-proportional; options is a prior — unmeasurable)
 - Strongest individual signal: `si_true_dtc` (FINRA biweekly days-to-cover) IC **−0.030** at 3m
+
+**V1.22 restatement.** The positioning signals are now ranked size-neutrally (they scale with liquidity and were reading mega caps as light on size alone), and `insider_net_90d_signed` dropped to 0 weight when its IC turned out to be that same size effect. On the honest 1m factor-neutral non-overlapping basis the composite is **IC −0.0232 (t −3.81), in-sample decile L/S +11.0%/yr** (was +4.9%). **Out-of-sample it is still not tradeable as a decile L/S: walk-forward OOS IC −0.0172 (t −2.27) but OOS L/S −1.4%/yr.** Use it to rank and to generate ideas, not as a long/short strategy. See SUMMARY.md § V1.22 and QUESTIONS.md.
 
 **Key history:**
 - V1.10 had an inflated IC of −0.040 driven by si_true_dtc IC of −0.103 measured on only 1y of NASDAQ-only data. Out-of-sample testing with FINRA's full universe-wide SI history revealed that figure was overfit; the more credible IC is −0.030.
@@ -59,7 +61,7 @@ open ~/Documents/AI\ workflows/positioning_meter/data/dashboard.html
 - V1.12 applied conservative cut per FINRA's own documentation ("Prior to June 2021, the data contains positions in OTC securities only"), retaining only post-June-2021 data — 5 years verified universe-wide.
 - V1.13 adopted positioning-leaning weights to reflect the conceptual case that positioning + options data are harder to fake than reflexive price signals.
 
-**Options bucket** (IV rank, 25Δ skew, term slope, P/C ratio) accumulates forward-only via yfinance. Cannot be backtested without paid historical options data — gets equal-weight within bucket and 0.35 bucket weight as a placeholder. See Limitations.
+**Options bucket** (IV rank, 25Δ skew, term slope, P/C ratio) accumulates forward-only via yfinance. Cannot be backtested without paid historical options data — gets equal-weight within bucket and 0.30 bucket weight as a placeholder. See Limitations.
 
 See `data/backtest_report.md` for full per-signal metrics.
 

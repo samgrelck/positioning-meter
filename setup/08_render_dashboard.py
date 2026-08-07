@@ -165,6 +165,8 @@ QUAD_HDR_TITLE = (
     "which way price is going (technical tercile), ranked across the universe today. "
     "Word = positioning, arrow = price. Only the four corners are tagged; middle "
     "terciles show a dot because the middle of the grid carries no measurable edge. "
+    "A cold corner on a name that is top-quartile institutionally owned is relabelled "
+    "Quiet — the positioning bucket measures the short side and churn, not ownership. "
     "Hover any tag for its historical 1-month factor-neutral cell return. "
     "See the 📖 How to read it tab."
 )
@@ -184,24 +186,59 @@ QUAD_DEFS = {
     ("cold", "weak"): (
         "Under-owned ↓", "quad-cool",
         "Light positioning + weak price action — the classic washed-out setup. "
-        "Best-performing cell historically: +3.7%/yr residual (t 1.68)."),
+        "Best-performing cell historically: +4.3%/yr residual (t 2.01)."),
     ("cold", "strong"): (
         "Under-owned ↑", "quad-cool",
         "Light positioning + strong price action — strength that nobody is "
-        "positioned for. +2.6%/yr residual (t 1.04)."),
+        "positioned for. +1.7%/yr residual (t 0.70) — the weakest of the four "
+        "corners, and not distinguishable from zero."),
     ("hot", "weak"): (
         "Crowded ↓", "quad-warm",
         "Heavy positioning + weak price action — crowded and rolling over. "
-        "−1.5%/yr residual (t −0.70)."),
+        "+0.2%/yr residual (t 0.08): flat. On the V1.22 size-neutral scores this "
+        "cell carries no measurable edge in either direction."),
     ("hot", "strong"): (
         "Crowded ↑", "quad-hot",
         "Heavy positioning + strong price action — crowded strength, the most "
-        "expensive place to be adding. Worst cell historically: −3.5%/yr "
-        "residual (t −1.86)."),
+        "expensive place to be adding. Worst cell historically: −4.9%/yr "
+        "residual (t −2.63)."),
 }
-# Sort order for the Setup column: most-crowded first descending.
+# V1.22 — ownership guard. The positioning bucket is built from short-side and
+# turnover signals (short volume, days-to-cover, float turnover): it measures how
+# heavily a name is SHORTED and how fast it CHURNS, and has no long-ownership
+# input. So a consensus long that nobody shorts reads "light positioning" and got
+# tagged Under-owned — CRWD and PANW both did, while sitting at the 90th and 84th
+# percentile of the universe by hedge-fund holder count. That is a real reading of
+# the short side and a false statement about ownership.
+#
+# When a name in a cold-positioning corner is independently well-held, the tag
+# drops the ownership claim and says only what the bucket actually measured.
+# Threshold is the 75th percentile of institutional ownership.
+OWNERSHIP_GUARD_PCTILE = 75.0
+QUAD_GUARDED = {
+    "Under-owned ↓": (
+        "Quiet ↓", "quad-cool",
+        "Low short interest and low turnover, with weak price action — but this "
+        "name is in the top quartile of the universe on institutional ownership, "
+        "so it is NOT under-owned. The positioning bucket measures the short side "
+        "and churn only; here it is reading 'nobody is trading it', not 'nobody "
+        "owns it'. Historical cell return is the Under-owned ↓ figure: +4.3%/yr "
+        "residual (t 2.01)."),
+    "Under-owned ↑": (
+        "Quiet ↑", "quad-cool",
+        "Low short interest and low turnover, with strong price action — but this "
+        "name is in the top quartile of the universe on institutional ownership, "
+        "so it is NOT under-owned. The positioning bucket measures the short side "
+        "and churn only; here it is reading 'nobody is trading it', not 'nobody "
+        "owns it'. Historical cell return is the Under-owned ↑ figure: +1.7%/yr "
+        "residual (t 0.70)."),
+}
+
+# Sort order for the Setup column: most-crowded first descending. Guarded tags
+# sort alongside the cell they came from — same positioning, weaker claim.
 QUAD_SORT_RANK = {"Crowded ↑": 2, "Crowded ↓": 1, "·": 0,
-                  "Under-owned ↑": -1, "Under-owned ↓": -2}
+                  "Under-owned ↑": -1, "Quiet ↑": -1,
+                  "Under-owned ↓": -2, "Quiet ↓": -2}
 
 QUAD_NONE = ("·", "quad-none",
              "Middle tercile on positioning or on technicals — no corner tag. "
@@ -219,21 +256,76 @@ def _tercile(s: pd.Series, labels) -> pd.Series:
     return out
 
 
-def assign_quadrants(snap: pd.DataFrame) -> pd.DataFrame:
-    """Add `quad_label` / `quad_cls` / `quad_title` from the pos x tech corners."""
+def load_ownership_pctile(conn, latest: str) -> pd.Series:
+    """Universe percentile of active-manager ownership, for the V1.22 Setup-tag
+    guard. Source is `hf_count_13f` — how many of the 40 curated hedge-fund filers
+    hold the name — ranked across the universe.
+
+    Ownership only has to MEASURE here, not predict: the HF panels were kept out
+    of the composite because their IC was trend-following rather than contrarian
+    (V1.3), and that finding is untouched by using them to qualify a label. Since
+    the guard only ever WEAKENS a claim and never assigns a cell, it changes no
+    ranking, IC or backtest number.
+
+    NOT `share_float.inst_held_pct` (yfinance heldPercentInstitutions), despite
+    that being the wider all-13F-filer measure. Two disqualifying problems,
+    measured on the 2026-08-06 snapshot: it is partly impossible — median 92%,
+    75th pct 102%, max 128% of shares outstanding, because yfinance divides 13F
+    shares by a share count that disagrees with its own — and in a TMT universe
+    where nearly everything is 60-95% institutionally held it does not
+    discriminate crowding at all. It ranks -0.21 against log market cap and -0.15
+    against hf_count_13f, putting CRWD, PANW, NVDA and MSFT in the bottom third,
+    i.e. it would never fire on the consensus longs this guard exists for. The
+    field is still ingested as drill-down context; it must not be read as a
+    crowding proxy.
+
+    Caveat carried honestly: hf_count_13f is +0.68 rank-correlated with log market
+    cap, so the guard does fire more on large caps. That is largely the true
+    relationship — big names are held by more funds — and it is acceptable here
+    because the guard only qualifies wording.
+    """
+    hf = pd.read_sql_query(
+        "SELECT ticker, pct_peer FROM signals_daily "
+        "WHERE date = ? AND signal_name = 'hf_count_13f' AND pct_peer IS NOT NULL",
+        conn, params=(latest,))
+    if hf.empty:
+        return pd.Series(dtype=float)
+    return pd.Series(hf["pct_peer"].values, index=hf["ticker"]).dropna()
+
+
+def assign_quadrants(snap: pd.DataFrame, own_pctile: pd.Series | None = None) -> pd.DataFrame:
+    """Add `quad_label` / `quad_cls` / `quad_title` from the pos x tech corners.
+
+    `own_pctile` (ticker -> 0..100 institutional-ownership percentile) applies the
+    V1.22 ownership guard: a cold-positioning corner on a name in the top quartile
+    of ownership is relabelled Quiet, which claims only what the positioning
+    bucket actually measures. Without it the tags are unguarded, as before.
+    """
     pos_t = _tercile(snap.get("score_positioning", pd.Series(dtype=float)),
                      ("cold", "mid", "hot"))
     tech_t = _tercile(snap.get("score_technical", pd.Series(dtype=float)),
                       ("weak", "mid", "strong"))
-    labels, classes, titles = [], [], []
-    for p, t in zip(pos_t, tech_t):
+    if own_pctile is None:
+        own_pctile = pd.Series(dtype=float)
+    own = own_pctile.reindex(snap["ticker"]).values if "ticker" in snap.columns else [None] * len(snap)
+
+    labels, classes, titles, guarded = [], [], [], []
+    for p, t, o in zip(pos_t, tech_t, own):
         lbl, cls, title = QUAD_DEFS.get((p, t), QUAD_NONE)
+        is_guarded = (lbl in QUAD_GUARDED
+                      and o is not None and pd.notna(o)
+                      and float(o) >= OWNERSHIP_GUARD_PCTILE)
+        if is_guarded:
+            lbl, cls, title = QUAD_GUARDED[lbl]
         labels.append(lbl)
         classes.append(cls)
         titles.append(title)
+        guarded.append(bool(is_guarded))
     snap["quad_label"] = labels
     snap["quad_cls"] = classes
     snap["quad_title"] = titles
+    snap["quad_guarded"] = guarded
+    snap["own_pctile"] = own
     return snap
 
 
@@ -283,7 +375,9 @@ def load_data():
 
     # V1.21: Setup quadrant (positioning x technical corners). Display-only —
     # never feeds the composite, the flags or the backtest.
-    snap = assign_quadrants(snap)
+    # V1.22: guarded by institutional ownership so a consensus long that simply
+    # isn't shorted stops being called "under-owned".
+    snap = assign_quadrants(snap, load_ownership_pctile(conn, latest))
 
     # New-listing guard. A name with too little PRICE HISTORY (e.g. a recent IPO
     # like SPCX/SpaceX, which posts a ~99 temp off just IPO float-churn + RSI)
@@ -1592,9 +1686,16 @@ def render_reading_guide(snap: pd.DataFrame, sig_long: pd.DataFrame, vs: dict) -
 
     # --- §3: live census of the Setup grid ------------------------------------
     counts = snap["quad_label"].value_counts().to_dict() if "quad_label" in snap.columns else {}
+    # V1.22: a guarded name is still IN its cell — the return figure describes the
+    # positioning x technical cell, and the guard only weakens the wording. Count
+    # it under the cell it came from so the census stays a census of the grid, and
+    # report the guarded share alongside.
+    _GUARD_SRC = {v[0]: k for k, v in QUAD_GUARDED.items()}
 
     def _cnt(lbl):
-        return counts.get(lbl, 0)
+        n = counts.get(lbl, 0)
+        guarded = sum(c for g, c in counts.items() if _GUARD_SRC.get(g) == lbl)
+        return f"{n + guarded}" + (f", {guarded} Quiet" if guarded else "")
 
     # --- §4: the worked example ----------------------------------------------
     ex = _pick_teaching_example(snap)
@@ -1760,22 +1861,33 @@ over 121 non-overlapping periods, 2016–2026, with today's name count in bracke
 <thead><tr><th></th><th class=num>Price weak</th><th class=num>Price strong</th></tr></thead>
 <tbody>
 <tr><th style="text-align:left">Positioning light</th>
-<td class=num><span class="quad quad-cool">Under-owned ↓</span><br><b>+3.7%/yr</b> (t 1.68) · [{_cnt('Under-owned ↓')}]</td>
-<td class=num><span class="quad quad-cool">Under-owned ↑</span><br><b>+2.6%/yr</b> (t 1.04) · [{_cnt('Under-owned ↑')}]</td></tr>
+<td class=num><span class="quad quad-cool">Under-owned ↓</span><br><b>+4.3%/yr</b> (t 2.01) · [{_cnt('Under-owned ↓')}]</td>
+<td class=num><span class="quad quad-cool">Under-owned ↑</span><br><b>+1.7%/yr</b> (t 0.70) · [{_cnt('Under-owned ↑')}]</td></tr>
 <tr><th style="text-align:left">Positioning heavy</th>
-<td class=num><span class="quad quad-warm">Crowded ↓</span><br><b>−1.5%/yr</b> (t −0.70) · [{_cnt('Crowded ↓')}]</td>
-<td class=num><span class="quad quad-hot">Crowded ↑</span><br><b>−3.5%/yr</b> (t −1.86) · [{_cnt('Crowded ↑')}]</td></tr>
+<td class=num><span class="quad quad-warm">Crowded ↓</span><br><b>+0.2%/yr</b> (t 0.08) · [{_cnt('Crowded ↓')}]</td>
+<td class=num><span class="quad quad-hot">Crowded ↑</span><br><b>−4.9%/yr</b> (t −2.63) · [{_cnt('Crowded ↑')}]</td></tr>
 </tbody>
 </table>
 </div>
 <p>The useful comparison is along the top-to-bottom axis: <b>within strong price action</b>,
-light-positioning names beat heavy-positioning names by <b>+6.1%/yr</b> (t 2.00). Strength
+light-positioning names beat heavy-positioning names by <b>+6.6%/yr</b> (t 2.03). Strength
 itself is not the problem; strength that everyone already owns is.</p>
 <p class=hint><b>Honest caveat:</b> that cell was chosen after looking at a 3×3 grid on 121
 periods, so it carries a multiple-comparison discount, and the project's own walk-forward
 showed decile long/short spreads do not survive out-of-sample. Use the grid to orient and to
 generate ideas; do not treat these as expected returns. Middle terciles are left untagged
 because the middle of the grid showed nothing measurable.</p>
+<p class=hint><b>What "positioning light" does and does not mean (V1.22):</b> the positioning
+bucket is built from short volume, days-to-cover, float turnover and insider flow. Every one
+of those measures the short side or the rate of churn — none of them measures how much of the
+name is <i>held</i>. A widely-owned consensus long that simply is not shorted therefore lands
+in the light-positioning row. Two corrections apply. The signals are now ranked
+<b>size-neutrally</b>, because days-to-cover and float turnover both scale with liquidity and
+were reading mega caps as light on size alone. And a cold-corner name that is top-quartile on
+institutional ownership is relabelled <b>Quiet</b>, which claims only what the bucket
+measured. Ownership itself is still deliberately kept out of the score: the 13F panels were
+trend-following rather than contrarian in backtest, so they qualify the label without
+touching the ranking.</p>
 </div>
 
 {example_html}
@@ -1847,10 +1959,11 @@ def render_glossary() -> str:
 <h4>Setup (quadrant)</h4>
 <p>Positioning tercile × technical tercile, ranked across the universe today. The <b>word</b> says how crowded the name is; the <b>arrow</b> says which way price is going.</p>
 <ul>
-<li><span class="quad quad-hot">Crowded ↑</span> — heavy positioning, strong price. The most expensive place to add. Historically the worst cell: −3.5%/yr residual (t −1.86).</li>
-<li><span class="quad quad-warm">Crowded ↓</span> — heavy positioning, weak price. Crowded and rolling over: −1.5%/yr (t −0.70).</li>
-<li><span class="quad quad-cool">Under-owned ↑</span> — light positioning, strong price. Strength nobody is positioned for: +2.6%/yr (t 1.04).</li>
-<li><span class="quad quad-cool">Under-owned ↓</span> — light positioning, weak price. The classic washed-out setup, and the best cell: +3.7%/yr (t 1.68).</li>
+<li><span class="quad quad-hot">Crowded ↑</span> — heavy positioning, strong price. The most expensive place to add. Historically the worst cell: −4.9%/yr residual (t −2.63).</li>
+<li><span class="quad quad-warm">Crowded ↓</span> — heavy positioning, weak price. Crowded and rolling over — though on the V1.22 size-neutral scores this cell is flat: +0.2%/yr (t 0.08).</li>
+<li><span class="quad quad-cool">Under-owned ↑</span> — light positioning, strong price. Strength nobody is positioned for: +1.7%/yr (t 0.70) — weakest corner, not distinguishable from zero.</li>
+<li><span class="quad quad-cool">Under-owned ↓</span> — light positioning, weak price. The classic washed-out setup, and the best cell: +4.3%/yr (t 2.01).</li>
+<li><span class="quad quad-cool">Quiet ↑ / ↓</span> — the same two cold cells, on a name that is <b>top-quartile on institutional ownership</b>. The positioning bucket is built from short volume, days-to-cover and float turnover: it measures the short side and churn, and has no long-ownership input, so on a consensus long it reads "nobody is trading it", not "nobody owns it". The guard drops the ownership claim and keeps the rest. Same cell, same historical return — weaker statement.</li>
 <li><span class="quad quad-none">·</span> — middle tercile on one or both axes. Deliberately unlabeled: the middle of the grid showed no measurable edge.</li>
 </ul>
 <p>Figures are mean 1-month factor-neutral forward returns over 121 non-overlapping periods, 2016–2026 — a description of the historical cell, not a forecast. Display-only; never feeds the composite, flags or backtest. Full walkthrough on the <b>📖 How to read it</b> tab.</p>

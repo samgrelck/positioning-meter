@@ -250,13 +250,17 @@ periods 2016–2026:
 
 | | price weak | price strong |
 |---|---|---|
-| **positioning light** | `Under-owned ↓` **+3.7%/yr** (t 1.68) | `Under-owned ↑` **+2.6%/yr** (t 1.04) |
-| **positioning heavy** | `Crowded ↓` **−1.5%/yr** (t −0.70) | `Crowded ↑` **−3.5%/yr** (t −1.86) |
+| **positioning light** | `Under-owned ↓` **+4.3%/yr** (t 2.01) | `Under-owned ↑` **+1.7%/yr** (t 0.70) |
+| **positioning heavy** | `Crowded ↓` **+0.2%/yr** (t 0.08) | `Crowded ↑` **−4.9%/yr** (t −2.63) |
 
-Within strong price action, light-positioning beats heavy-positioning by **+6.1%/yr (t 2.00)**.
+Within strong price action, light-positioning beats heavy-positioning by **+6.6%/yr (t 2.03)**.
 Middle terciles are deliberately untagged — no measurable edge there. **Caveat carried on the
 dashboard:** that cell was picked after inspecting a 3×3 grid, so it carries a
 multiple-comparison discount, and walk-forward already showed decile L/S does not survive OOS.
+
+*Figures restated on the V1.22 size-neutral scores (`tools/quad_cell_returns.py`, which also
+makes them re-runnable — V1.21 computed them ad hoc). The two strong corners strengthened;
+`Crowded ↓` went flat and `Under-owned ↑` is no longer distinguishable from zero.*
 
 **3. `Conv` column removed** from all tables (field still computed, still in the CSV). Tested
 as a filter and it does not work: composite IC flat from no filter through conviction ≥70
@@ -272,10 +276,100 @@ options has **one** measurable non-overlapping 1m period, so its 0.30 weight is 
 five steps; and what not to lean on. Deliberately does **not** change any output — it describes
 the evidence and leaves the frozen weights alone.
 
+## Size-neutral positioning + ownership guard (V1.22 — model change)
+
+**Trigger.** PANW, CRWD and IBM were all tagged `Under-owned`, which is not a credible
+statement about two of the most widely-held names in software. Two distinct causes, one real
+model defect and one labelling defect.
+
+**1. The positioning bucket was partly a size factor.** `si_true_dtc` is short interest ÷ ADV
+and `float_turnover_20d` is ADV ÷ float — both scale with liquidity, so mega caps read
+structurally light. Measured on the old scores: `score_positioning` was **−0.37** rank-correlated
+with log market cap (p 3e-13), mean positioning ran **64.5** in the smallest market-cap decile
+down to **39.8** in the largest, and **76%** of the top decile sat in the "under-owned" tercile
+vs **14%** of the bottom. NVDA, MSFT, AMZN, META, AVGO, ORCL and CSCO were all tagged light.
+
+**Fix** (`lib/signals/percentiles.size_neutral_rank`): per date, rank the signal
+cross-sectionally, regress that rank on log market cap, re-rank the residual. Rank space, not
+raw space, because raw values are heavily skewed; regression, not within-quintile buckets, so a
+name drifting across a boundary doesn't flip its tag daily. Applied to the **positioning
+composite signals only** — technical and options signals are not liquidity-scaled, and the
+overlays (including `hf_count_13f`, which drives the ownership guard) keep the plain rank so
+"well-held" stays an absolute statement. Size comes from `loaders.load_market_cap_panel`:
+current market cap walked back along the adjusted price path, anchored on `share_float`.
+`fundamentals_q.shares_out` is unusable for this — it is as-reported against a split-adjusted
+price series (NVDA's 2021 count read as a $4bn company), with duplicate rows and junk values.
+
+**Result.** Size correlation −0.369 → **−0.119** on positioning, −0.288 → **−0.053** on
+Temperature; top-decile share of the cold tercile 76% → **61%**. The residual comes from
+`pct_self`, not `pct_peer` (which is now ~0.00): mega caps genuinely sit low in their *own*
+trailing ranges on short volume and turnover right now. That is a real market condition and
+`pct_self` should keep reporting it.
+
+**The edge was not the size premium.** 1m factor-neutral IC is unchanged (−0.0205 t −3.45 →
+**−0.0208 t −3.43**, measured against the pre-change DB), but the decile long/short spread
+**more than doubled: +4.1%/yr → +10.1%/yr**; 3m went +0.0% → +1.9%/yr. Previously the cold
+decile was diluted with mega caps that were there on size; now it holds genuinely washed-out
+names. Raw (non-neutral) IC fell −0.0143 → −0.0082, which is the expected signature of removing
+an unintended long-large-cap bet from a decade in which mega-cap tech won. Cell returns were
+also re-checked with **size added to the return-side neutralization** and barely move
+(`Under-owned ↓` +4.3% → +4.4%, `Crowded ↑` −4.9% → −4.9%), so the grid is not a size premium
+either.
+
+**The one result that cuts the other way — walk-forward OOS did not improve.**
+`tools/compute_validation_stats.py`: in-sample IC −0.0229 → **−0.0232** (t −3.81) with L/S
+**+4.9%/yr → +11.0%/yr**, but out-of-sample IC −0.0186 → **−0.0172** (t −2.27) and the OOS
+decile L/S went **−0.1%/yr → −1.4%/yr**. So the doubling of the long/short spread is an
+in-sample result; the tradeable decile spread still does not survive walk-forward, and is
+marginally worse than before. The pre-existing caveat therefore stands unchanged and is if
+anything reinforced: **use the tool to rank and to generate ideas, not as a decile L/S
+strategy.** What V1.22 fixes is the *construct* — the score no longer says "under-owned" when
+it means "large" — not the out-of-sample tradeability, which was never there.
+
+**2. `insider_net_90d_signed` dropped from 11.4% to 0.** Its entire IC lived in the
+contaminated component: `pct_peer` was −0.24 to −0.39 correlated with log mcap across
+2024–2026, IC was −0.024 there and −0.007 in the size-neutral `pct_self`. Net insider dollars
+scale with market cap × stock comp × price, and 76% of the universe is net-selling, so the
+signal was reading "big company whose insiders sold a lot of dollars" — which is why CRWD's
+$203m of 90-day net insider selling was pushing it toward *under-owned*. Once the rank was
+neutralized its IC collapsed to **−0.0036 (t −0.51)**. The sign was never a bug — it was
+empirically chosen (negative IC in 6 of 6 horizon × kind cells, QUESTIONS.md) — but the IC it
+was chosen on was the size effect. The three survivors all hold up: `short_volume_ratio_14d`
+t −1.80, `si_true_dtc` t −1.77, `float_turnover_20d` t −2.23.
+
+`tools/tune_weights_1m.py` gained a **significance gate** (`--min-t 1.0`, `--min-n 20`) on top
+of the existing correct-sign rule — previously weight = |IC| for any negative IC, so a t −0.51
+signal still drew 8%. Side effect beyond the positioning work: it also drops `ret_6m` (t −0.25)
+and `dist_200ma` (t −0.45) from technical, and it now reproduces the long-standing manual
+options decision automatically (n = 1–2 periods → untunable → explicit equal weights, instead
+of handing `skew_25d` a 1.0 weight off n=2). Bucket weights unchanged at 0.50 / 0.20 / 0.30.
+
+**3. Ownership guard on the Setup tag.** The positioning bucket has **no long-ownership input** —
+short volume, days-to-cover, float turnover and insider flow all measure the short side or the
+rate of churn. A consensus long that simply is not shorted therefore lands in the light row.
+When a cold-corner name is **top-quartile on institutional ownership**, the tag is relabelled
+`Quiet ↑/↓`, which claims only what the bucket measured. Ownership stays **out of the score**:
+the 13F panels were trend-following rather than contrarian in backtest (V1.3), and a guard only
+needs ownership to *measure*, not to *predict*. Because the guard only ever weakens a claim and
+never assigns a cell, it changes no ranking, IC or backtest number.
+
+Source is **`hf_count_13f`** (how many of the 40 curated HF filers hold the name), universe-ranked.
+`share_float.inst_held_pct` (yfinance `heldPercentInstitutions`) was added to weekly job 19 and
+**tested as the intended primary source, then rejected on the data**: on the first full pull the
+universe median was 92% of shares outstanding with a 75th percentile of **102%** and a max of
+**128%** — yfinance divides 13F shares by a share count that disagrees with its own — and in a
+universe where nearly every name is 60–95% institutionally held it does not discriminate
+crowding at all. It ranks **−0.21** against log market cap and **−0.15** against `hf_count_13f`,
+putting CRWD, PANW, NVDA and MSFT in the bottom third — it would never fire on the consensus
+longs the guard exists for. The field is still ingested (now rejecting impossible >100% values)
+as drill-down context only, flagged in code as not-a-crowding-proxy. Honest caveat on the
+measure actually used: `hf_count_13f` is +0.68 rank-correlated with log market cap, so the guard
+does fire more on large caps — largely the true relationship, and acceptable for wording.
+
 ## Dashboard features (V2.0)
 
 - 📐 **Univ %ile column** (V1.21) — Temperature's percentile vs the whole TMT universe today. Judge extremity on this, not raw Temp; the composite is compressed toward 50 by construction.
-- 🎯 **Setup column** (V1.21) — positioning × technical corner tag (`Crowded ↑/↓`, `Under-owned ↑/↓`); sortable via `data-sort=quadrank`, hover for the historical cell return.
+- 🎯 **Setup column** (V1.21, guarded V1.22) — positioning × technical corner tag (`Crowded ↑/↓`, `Under-owned ↑/↓`, or `Quiet ↑/↓` when a cold corner is top-quartile institutionally owned); sortable via `data-sort=quadrank`, hover for the historical cell return.
 - 🌡️ **Self 1y column** (V1.18) — Temperature vs the name's own trailing 1-year range (percentile); sortable; hover for z-score + 6mo. See "Self-vs-own-history" above.
 - 🧊 **Self 1y P+O column** (V1.20) — the same own-history percentile with **technicals excluded** (positioning + options only, 0.625/0.375); sortable. Read against Self 1y to split "extreme because it rallied" from "extreme on crowding/hedging".
 - 📘 **Glossary** at top — every metric explained

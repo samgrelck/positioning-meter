@@ -19,6 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import argparse
 import json
 import numpy as np
 import pandas as pd
@@ -107,30 +108,60 @@ def ic_1m(sig, px, cluster, beta):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    # V1.22: a signal must be correctly signed AND distinguishable from noise to
+    # earn weight. Before this gate, weight = |IC| for any negative IC, so a
+    # t = -0.51 signal still drew 8% of its bucket. That is how
+    # insider_net_90d_signed held 11.4% of positioning: its IC was almost entirely
+    # the market-cap tilt in the old cross-sectional rank (raw rank was -0.37
+    # correlated with log mcap), and once the rank was size-neutralized its IC
+    # fell from -0.024 to -0.004.
+    ap.add_argument("--min-t", type=float, default=1.0,
+                    help="minimum |t| on the IC to earn weight (default 1.0)")
+    ap.add_argument("--min-n", type=int, default=20,
+                    help="minimum non-overlapping periods to tune on (default 20)")
+    args = ap.parse_args()
+
     px, cluster, bsc = load()
     beta = betas(px)
-    print(f"1-month, factor-neutral, non-overlapping IC per signal (contrarian: negative is good)\n")
+    print(f"1-month, factor-neutral, non-overlapping IC per signal (contrarian: negative is good)")
+    print(f"gate: IC < 0 and |t| >= {args.min_t} and n >= {args.min_n}\n")
     weights = {}
     for bucket, sigs in BUCKETS.items():
         print(f"=== {bucket} ===")
-        ics = {}
+        keep = {}
         for s in sigs:
             panel = sig_panel(s)
             if panel.empty:
                 print(f"  {s:24s}  (no data)")
-                ics[s] = None
+                keep[s] = 0.0
                 continue
             ic, t, n = ic_1m(panel, px, cluster, beta)
-            ics[s] = ic
-            flag = "contrarian" if (ic is not None and ic < 0) else "WRONG-SIGN (->0)"
-            print(f"  {s:24s} IC {ic:+.4f}  t {t:+.2f}  n={n:<3}  {flag}")
-        # weight = |IC| for negative-IC signals, else 0; normalize within bucket
-        raw = {s: (abs(v) if (v is not None and v < 0) else 0.0) for s, v in ics.items()}
-        tot = sum(raw.values())
-        norm = {s: (raw[s] / tot if tot else 0.0) for s in sigs}
-        for s in sigs:
-            weights[s] = round(norm[s], 4)
-        print(f"  -> weights: {{{', '.join(f'{s}: {weights[s]}' for s in sigs)}}}\n")
+            if ic is None or not np.isfinite(ic):
+                verdict, w = "no IC (->0)", 0.0
+            elif n < args.min_n:
+                verdict, w = f"n<{args.min_n}, untunable (->0)", 0.0
+            elif ic >= 0:
+                verdict, w = "WRONG-SIGN (->0)", 0.0
+            elif not np.isfinite(t) or abs(t) < args.min_t:
+                verdict, w = f"|t|<{args.min_t}, noise (->0)", 0.0
+            else:
+                verdict, w = "contrarian, kept", abs(ic)
+            keep[s] = w
+            print(f"  {s:24s} IC {ic:+.4f}  t {t:+.2f}  n={n:<4} {verdict}")
+        tot = sum(keep.values())
+        if tot == 0:
+            # Nothing in this bucket is tunable (e.g. options, whose yfinance
+            # history is far too short for non-overlapping 1m periods). Equal-
+            # weight rather than emit zeros, and say so.
+            eq = round(1.0 / len(sigs), 4)
+            for s in sigs:
+                weights[s] = eq
+            print(f"  -> no signal cleared the gate; EQUAL-WEIGHTING {eq} each\n")
+        else:
+            for s in sigs:
+                weights[s] = round(keep[s] / tot, 4)
+            print(f"  -> weights: {{{', '.join(f'{s}: {weights[s]}' for s in sigs)}}}\n")
 
     # bucket-level ICs (from stored bucket scores) to inform across-bucket weights
     print("=== bucket-level 1m factor-neutral IC (informs across-bucket weights) ===")

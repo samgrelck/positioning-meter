@@ -224,6 +224,20 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
         "ret_12m", "rs_vs_qqq_3m", "rs_vs_xlk_3m",
     }
 
+    # V1.22: size-neutralize the cross-sectional rank of the POSITIONING
+    # composite signals. si_true_dtc (SI/ADV) and float_turnover_20d (ADV/float)
+    # both scale with liquidity, so a plain universe rank read mega caps as
+    # lightly-positioned on size alone (score_positioning was -0.37 rank-corr
+    # with log mcap; 76% of the top mcap decile sat in the "under-owned"
+    # tercile). Positioning only — technical/options signals are not
+    # liquidity-scaled. Overlays (incl. hf_count_13f, which drives the dashboard
+    # ownership guard) keep the plain rank so "well-held" stays an absolute
+    # statement rather than a size-relative one.
+    SIZE_NEUTRAL_SIGNALS = {s for s, b in SIGNAL_TO_BUCKET.items() if b == "positioning"}
+    mcap_panel = loaders.load_market_cap_panel(closes)
+    mcap_panel = mcap_panel[[c for c in mcap_panel.columns if c in universe_tickers]]
+    print(f"Market-cap panel for size-neutralization: {mcap_panel.notna().any().sum()} tickers")
+
     print("Computing pct_peer...")
     for sig_name, panel in raw_signals.items():
         # V1.8: pct_peer uses UNIVERSE-WIDE ranking only (blend_universe=1.0).
@@ -240,6 +254,7 @@ def main(slow_window: int | None = None, fast_window: int | None = None):
             ticker_to_clusters=ticker_to_clusters_multi,
             cluster_members=cluster_members_map,
             blend_universe=1.0,  # 1.0 = universe only; 0.0 = cluster only
+            size_panel=mcap_panel if sig_name in SIZE_NEUTRAL_SIGNALS else None,
         )
 
     # V1.10: For technical signals, replace pct_peer with pct_self so the
